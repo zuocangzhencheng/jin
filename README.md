@@ -196,8 +196,10 @@ http://localhost:8000/outputs/stock-watch-app/
 7. 页面地址通常是：
 
 ```text
-https://<你的用户名>.github.io/<仓库名>/outputs/stock-watch-app/
+https://<你的用户名>.github.io/<仓库名>/
 ```
+
+根目录的 `index.html` 会自动跳转到 App 页面。
 
 ## 迭代方式
 
@@ -214,4 +216,3 @@ https://<你的用户名>.github.io/<仓库名>/outputs/stock-watch-app/
 本项目只用于个人学习、复盘和交易纪律辅助，不构成投资建议。
 
 任何买卖都应以使用者自己的判断、风险承受能力和合规账户权限为准。A 股行情波动大，免费数据源不保证实时性、完整性和准确性。
-

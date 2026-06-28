@@ -1406,7 +1406,7 @@ function fetchIndexQuote(index) {
     const timer = window.setTimeout(() => finish(null), JSONP_TIMEOUT);
     script.id = `jsonp-${index.symbol}`;
     script.charset = "gbk";
-    script.src = `http://qt.gtimg.cn/q=${index.symbol}&_=${Date.now()}`;
+    script.src = `https://qt.gtimg.cn/q=${index.symbol}&_=${Date.now()}`;
     script.async = true;
     script.onload = () => {
       const raw = window[varName];
@@ -1445,7 +1445,7 @@ function fetchSinaGoldQuote(source) {
     const script = document.createElement("script");
     script.id = `jsonp-gold-${source.symbol}`;
     script.charset = "gbk";
-    script.src = `http://hq.sinajs.cn/list=${source.symbol}&_=${Date.now()}`;
+    script.src = `https://hq.sinajs.cn/list=${source.symbol}&_=${Date.now()}`;
     script.async = true;
 
     const timer = window.setTimeout(() => {
@@ -1632,7 +1632,7 @@ function parseFlexibleDate(value) {
 function fetchThemeBoards() {
   const callbackName = `emTheme_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
   const url = [
-    "http://push2.eastmoney.com/api/qt/clist/get",
+    "https://push2.eastmoney.com/api/qt/clist/get",
     `?cb=${callbackName}`,
     "&pn=1",
     "&pz=500",
@@ -2228,7 +2228,7 @@ function getLocalMinute(date = new Date()) {
 function fetchRadarList(fid, page = 1) {
   const callbackName = `emRadar_${fid}_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
   const url = [
-    "http://push2.eastmoney.com/api/qt/clist/get",
+    "https://push2.eastmoney.com/api/qt/clist/get",
     `?cb=${callbackName}`,
     `&pn=${page}`,
     `&pz=${RADAR_PAGE_SIZE}`,
@@ -2416,7 +2416,7 @@ function fetchQuote(stock) {
     const script = document.createElement("script");
     script.id = `jsonp-${symbol}`;
     script.charset = "gbk";
-    script.src = `http://qt.gtimg.cn/q=${symbol}&_=${Date.now()}`;
+    script.src = `https://qt.gtimg.cn/q=${symbol}&_=${Date.now()}`;
     script.async = true;
 
     const timer = setTimeout(() => {
@@ -2448,7 +2448,7 @@ function fetchTechnical(stock) {
   const callbackName = `emKline_${stock.code}_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
   const secid = `${marketPrefix(stock.code) === "sh" ? "1" : "0"}.${stock.code}`;
   const url = [
-    "http://push2his.eastmoney.com/api/qt/stock/kline/get",
+    "https://push2his.eastmoney.com/api/qt/stock/kline/get",
     `?cb=${callbackName}`,
     `&secid=${secid}`,
     "&fields1=f1,f2,f3,f4,f5,f6",
