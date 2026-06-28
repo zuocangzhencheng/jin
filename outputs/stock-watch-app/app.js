@@ -3,7 +3,9 @@ const CONFIG_STORAGE_KEY = "stock-watch-config-v1";
 const AUCTION_STORAGE_KEY = "stock-watch-auction-v1";
 const IGNORED_RADAR_STORAGE_KEY = "stock-watch-ignored-radar-v1";
 const REVIEW_LOG_STORAGE_KEY = "stock-watch-review-log-v1";
-const APP_VERSION = "v1.4.1 中军龙头";
+const FLOW_SNAPSHOT_STORAGE_KEY = "stock-watch-flow-snapshots-v1";
+const COLLAPSE_STORAGE_KEY = "stock-watch-collapsed-panels-v1";
+const APP_VERSION = "v1.4.9 模块折叠";
 const JSONP_TIMEOUT = 9000;
 const RADAR_PAGE_SIZE = 80;
 const TECH_REFRESH_MS = 60000;
@@ -13,6 +15,12 @@ const AUCTION_START_MINUTES = 9 * 60 + 15;
 const AUCTION_LOCK_MINUTES = 9 * 60 + 20;
 const AUCTION_END_MINUTES = 9 * 60 + 25;
 const AUCTION_VERIFY_MINUTES = 9 * 60 + 35;
+const FLOW_TIMELINE_SLOTS = [
+  { key: "open", label: "9:35", note: "开盘确认", target: 9 * 60 + 35, start: 9 * 60 + 30, end: 10 * 60 + 5 },
+  { key: "mid", label: "10:30", note: "上午持续", target: 10 * 60 + 30, start: 10 * 60 + 5, end: 11 * 60 + 30 },
+  { key: "pm", label: "13:30", note: "午后回流", target: 13 * 60 + 30, start: 13 * 60, end: 14 * 60 + 5 },
+  { key: "late", label: "14:30", note: "尾盘确认", target: 14 * 60 + 30, start: 14 * 60 + 5, end: 15 * 60 }
+];
 
 const defaultSettings = {
   refreshSeconds: 60,
@@ -34,6 +42,11 @@ const themeStrength = {
   "面板/玻璃基板": 3,
   "功率半导体": 3,
   "光通信/海缆": 3,
+  "风电设备": 3,
+  "有色金属": 3,
+  "贵金属/黄金": 3,
+  "稀土永磁": 3,
+  "煤炭能源": 3,
   "其他": 2
 };
 
@@ -47,7 +60,30 @@ const themeKeywords = {
   "电子特气": ["电子特气", "特气", "稀有气体", "氟化工"],
   "面板/玻璃基板": ["面板", "OLED", "MiniLED", "玻璃基板", "显示"],
   "功率半导体": ["功率半导体", "SiC", "IGBT", "MOSFET", "第三代半导体"],
-  "光通信/海缆": ["光通信", "海缆", "海底电缆", "通信设备", "光纤光缆"]
+  "光通信/海缆": ["光通信", "海缆", "海底电缆", "通信设备", "光纤光缆"],
+  "风电设备": ["风电", "风电设备", "风机", "风塔", "叶片", "海上风电"],
+  "有色金属": ["有色", "铜", "铝", "锌", "镍", "工业金属", "小金属"],
+  "贵金属/黄金": ["黄金", "贵金属", "白银", "金矿"],
+  "稀土永磁": ["稀土", "永磁", "钨", "钼", "小金属"],
+  "煤炭能源": ["煤炭", "能源", "动力煤", "焦煤", "石油", "天然气"]
+};
+
+const themeProfiles = {
+  "AI算力/服务器": { lane: "主攻科技", className: "primary", priority: 12, minBuyStrength: 4 },
+  "光模块/CPO": { lane: "主攻科技", className: "primary", priority: 12, minBuyStrength: 4 },
+  "HBM/存储": { lane: "主攻科技", className: "primary", priority: 12, minBuyStrength: 4 },
+  "半导体设备": { lane: "主攻科技", className: "primary", priority: 14, minBuyStrength: 4 },
+  "半导体材料": { lane: "主攻科技", className: "primary", priority: 12, minBuyStrength: 4 },
+  "先进封装": { lane: "主攻科技", className: "primary", priority: 12, minBuyStrength: 4 },
+  "电子特气": { lane: "主攻科技", className: "primary", priority: 10, minBuyStrength: 4 },
+  "面板/玻璃基板": { lane: "科技观察", className: "tech-watch", priority: 4, minBuyStrength: 4 },
+  "功率半导体": { lane: "科技观察", className: "tech-watch", priority: 6, minBuyStrength: 4 },
+  "光通信/海缆": { lane: "科技观察", className: "tech-watch", priority: 5, minBuyStrength: 4 },
+  "风电设备": { lane: "轮动观察", className: "rotation", priority: -12, minBuyStrength: 5 },
+  "有色金属": { lane: "轮动观察", className: "rotation", priority: -12, minBuyStrength: 5 },
+  "贵金属/黄金": { lane: "轮动观察", className: "rotation", priority: -12, minBuyStrength: 5 },
+  "稀土永磁": { lane: "轮动观察", className: "rotation", priority: -10, minBuyStrength: 5 },
+  "煤炭能源": { lane: "轮动观察", className: "rotation", priority: -14, minBuyStrength: 5 }
 };
 
 const marketIndexes = [
@@ -140,11 +176,14 @@ const commonStocks = [
   { code: "002130", name: "沃尔核材", theme: "光通信/海缆", note: "高速铜缆 / 通信材料", aliases: ["沃尔"] },
   { code: "002156", name: "通富微电", theme: "先进封装", note: "封测 / 先进封装", aliases: ["通富"] },
   { code: "002185", name: "华天科技", theme: "先进封装", note: "封测 / 先进封装", aliases: ["华天"] },
+  { code: "002202", name: "金风科技", theme: "风电设备", note: "风机 / 风电设备", aliases: ["金风"] },
   { code: "002281", name: "光迅科技", theme: "光模块/CPO", note: "光器件 / 光模块", aliases: ["光迅"] },
   { code: "002371", name: "北方华创", theme: "半导体设备", note: "半导体设备", aliases: ["北方"] },
   { code: "002409", name: "雅克科技", theme: "半导体材料", note: "半导体材料 / 电子特气", aliases: ["雅克"] },
   { code: "002436", name: "兴森科技", theme: "先进封装", note: "IC载板 / 封装基板", aliases: ["兴森"] },
   { code: "002463", name: "沪电股份", theme: "AI算力/服务器", note: "AI服务器PCB", aliases: ["沪电"] },
+  { code: "002487", name: "大金重工", theme: "风电设备", note: "风塔 / 海上风电", aliases: ["大金"] },
+  { code: "002531", name: "天顺风能", theme: "风电设备", note: "风塔 / 风电设备", aliases: ["天顺"] },
   { code: "002549", name: "凯美特气", theme: "电子特气", note: "稀有气体 / 电子特气", aliases: ["凯美特"] },
   { code: "002654", name: "万润科技", theme: "HBM/存储", note: "存储相关 / LED", aliases: ["万润"] },
   { code: "300054", name: "鼎龙股份", theme: "半导体材料", note: "CMP材料", aliases: ["鼎龙"] },
@@ -171,15 +210,44 @@ const commonStocks = [
   { code: "600703", name: "三安光电", theme: "功率半导体", note: "化合物半导体 / MiniLED", aliases: ["三安"] },
   { code: "600707", name: "彩虹股份", theme: "面板/玻璃基板", note: "面板 / 玻璃基板", aliases: ["彩虹"] },
   { code: "600745", name: "闻泰科技", theme: "功率半导体", note: "功率半导体 / 半导体IDM", aliases: ["闻泰"] },
+  { code: "600875", name: "东方电气", theme: "风电设备", note: "电力设备 / 风电", aliases: ["东方电气"] },
   { code: "601138", name: "工业富联", theme: "AI算力/服务器", note: "AI服务器整柜", aliases: ["工业富联", "富联", "FII"] },
+  { code: "601615", name: "明阳智能", theme: "风电设备", note: "风机 / 海上风电", aliases: ["明阳"] },
   { code: "601869", name: "长飞光纤", theme: "光通信/海缆", note: "光纤光缆", aliases: ["长飞"] },
   { code: "603019", name: "中科曙光", theme: "AI算力/服务器", note: "AI服务器 / 算力", aliases: ["曙光", "中科曙光"] },
   { code: "603083", name: "剑桥科技", theme: "光模块/CPO", note: "光模块 / 通信设备", aliases: ["剑桥"] },
+  { code: "603218", name: "日月股份", theme: "风电设备", note: "风电铸件", aliases: ["日月"] },
+  { code: "603606", name: "东方电缆", theme: "风电设备", note: "海缆 / 海上风电", aliases: ["东缆", "东方电缆"] },
   { code: "603290", name: "斯达半导", theme: "功率半导体", note: "IGBT / 功率半导体", aliases: ["斯达"] },
   { code: "603690", name: "至纯科技", theme: "半导体设备", note: "清洗设备 / 高纯工艺", aliases: ["至纯"] },
   { code: "603986", name: "兆易创新", theme: "HBM/存储", note: "存储芯片 / MCU", aliases: ["兆易"] },
   { code: "605111", name: "新洁能", theme: "功率半导体", note: "功率器件", aliases: ["新洁能"] },
-  { code: "605358", name: "立昂微", theme: "半导体材料", note: "硅片 / 功率半导体", aliases: ["立昂", "立微昂"] }
+  { code: "605358", name: "立昂微", theme: "半导体材料", note: "硅片 / 功率半导体", aliases: ["立昂", "立微昂"] },
+  { code: "000630", name: "铜陵有色", theme: "有色金属", note: "铜 / 工业金属", aliases: ["铜陵"] },
+  { code: "000807", name: "云铝股份", theme: "有色金属", note: "铝 / 工业金属", aliases: ["云铝"] },
+  { code: "000831", name: "中国稀土", theme: "稀土永磁", note: "稀土资源", aliases: ["中国稀土"] },
+  { code: "000933", name: "神火股份", theme: "有色金属", note: "铝 / 煤炭", aliases: ["神火"] },
+  { code: "000970", name: "中科三环", theme: "稀土永磁", note: "稀土永磁材料", aliases: ["中科三环"] },
+  { code: "000975", name: "银泰黄金", theme: "贵金属/黄金", note: "黄金资源", aliases: ["银泰"] },
+  { code: "002056", name: "横店东磁", theme: "稀土永磁", note: "永磁材料 / 光伏", aliases: ["横店东磁"] },
+  { code: "002155", name: "湖南黄金", theme: "贵金属/黄金", note: "黄金 / 锑", aliases: ["湖南黄金"] },
+  { code: "600028", name: "中国石化", theme: "煤炭能源", note: "石化能源", aliases: ["中石化", "中国石化"] },
+  { code: "600111", name: "北方稀土", theme: "稀土永磁", note: "稀土资源", aliases: ["北方稀土"] },
+  { code: "600188", name: "兖矿能源", theme: "煤炭能源", note: "煤炭能源", aliases: ["兖矿"] },
+  { code: "600362", name: "江西铜业", theme: "有色金属", note: "铜 / 工业金属", aliases: ["江铜", "江西铜业"] },
+  { code: "600392", name: "盛和资源", theme: "稀土永磁", note: "稀土资源", aliases: ["盛和"] },
+  { code: "600489", name: "中金黄金", theme: "贵金属/黄金", note: "黄金资源", aliases: ["中金黄金"] },
+  { code: "600547", name: "山东黄金", theme: "贵金属/黄金", note: "黄金资源", aliases: ["山东黄金"] },
+  { code: "600549", name: "厦门钨业", theme: "稀土永磁", note: "钨 / 稀土", aliases: ["厦钨", "厦门钨业"] },
+  { code: "600938", name: "中国海油", theme: "煤炭能源", note: "油气能源", aliases: ["中海油", "中国海油"] },
+  { code: "600988", name: "赤峰黄金", theme: "贵金属/黄金", note: "黄金资源", aliases: ["赤峰黄金"] },
+  { code: "601088", name: "中国神华", theme: "煤炭能源", note: "煤炭 / 高股息", aliases: ["神华", "中国神华"] },
+  { code: "601225", name: "陕西煤业", theme: "煤炭能源", note: "煤炭 / 高股息", aliases: ["陕煤", "陕西煤业"] },
+  { code: "601600", name: "中国铝业", theme: "有色金属", note: "铝 / 工业金属", aliases: ["中铝", "中国铝业"] },
+  { code: "601857", name: "中国石油", theme: "煤炭能源", note: "油气能源", aliases: ["中石油", "中国石油"] },
+  { code: "601898", name: "中煤能源", theme: "煤炭能源", note: "煤炭能源", aliases: ["中煤"] },
+  { code: "601899", name: "紫金矿业", theme: "有色金属", note: "铜 / 黄金 / 资源", aliases: ["紫金", "紫金矿业"] },
+  { code: "603993", name: "洛阳钼业", theme: "有色金属", note: "钼 / 钴 / 铜", aliases: ["洛钼", "洛阳钼业"] }
 ];
 
 const themeCoreMap = {
@@ -236,6 +304,36 @@ const themeCoreMap = {
     { code: "600487", name: "亨通光电", role: "龙头", type: "leader", reason: "光通信和海缆核心弹性" },
     { code: "601869", name: "长飞光纤", role: "分支核心", type: "core", reason: "光纤光缆核心观察" },
     { code: "600498", name: "烽火通信", role: "核心", type: "core", reason: "通信设备分支观察" }
+  ],
+  "风电设备": [
+    { code: "002202", name: "金风科技", role: "中军/龙头", type: "both", reason: "风机整机容量核心，观察风电设备线持续性" },
+    { code: "601615", name: "明阳智能", role: "整机核心", type: "core", reason: "风机整机和海上风电核心观察" },
+    { code: "002487", name: "大金重工", role: "风塔龙头", type: "leader", reason: "风塔和海上风电弹性核心" },
+    { code: "603606", name: "东方电缆", role: "海缆核心", type: "core", reason: "海上风电海缆分支核心" }
+  ],
+  "有色金属": [
+    { code: "601899", name: "紫金矿业", role: "中军/龙头", type: "both", reason: "铜金矿资源龙头，容量和趋势代表资源线持续性" },
+    { code: "600362", name: "江西铜业", role: "铜中军", type: "middle", reason: "铜资源和冶炼核心，观察铜价映射" },
+    { code: "601600", name: "中国铝业", role: "铝中军", type: "middle", reason: "铝产业链容量核心，观察工业金属扩散" },
+    { code: "603993", name: "洛阳钼业", role: "分支龙头", type: "leader", reason: "钼钴铜等小金属弹性核心" }
+  ],
+  "贵金属/黄金": [
+    { code: "600547", name: "山东黄金", role: "中军", type: "middle", reason: "黄金资源容量核心，观察金价和避险资金映射" },
+    { code: "600489", name: "中金黄金", role: "龙头", type: "leader", reason: "黄金央企核心，适合观察板块持续性" },
+    { code: "600988", name: "赤峰黄金", role: "弹性龙头", type: "leader", reason: "黄金资源弹性核心，观察趋势加速" },
+    { code: "000975", name: "银泰黄金", role: "核心", type: "core", reason: "黄金资源分支核心，观察板块扩散" }
+  ],
+  "稀土永磁": [
+    { code: "600111", name: "北方稀土", role: "中军/龙头", type: "both", reason: "稀土资源定价和容量核心" },
+    { code: "000831", name: "中国稀土", role: "核心", type: "core", reason: "稀土资源整合核心，观察政策和供需映射" },
+    { code: "600392", name: "盛和资源", role: "弹性龙头", type: "leader", reason: "稀土资源弹性观察" },
+    { code: "000970", name: "中科三环", role: "永磁核心", type: "core", reason: "稀土永磁材料核心，观察下游扩散" }
+  ],
+  "煤炭能源": [
+    { code: "601088", name: "中国神华", role: "中军", type: "middle", reason: "煤炭高股息容量核心，观察防御和资源偏好" },
+    { code: "601225", name: "陕西煤业", role: "龙头", type: "leader", reason: "煤炭趋势弹性和分红核心" },
+    { code: "600188", name: "兖矿能源", role: "弹性核心", type: "core", reason: "煤炭弹性观察，判断周期线强弱" },
+    { code: "600028", name: "中国石化", role: "能源中军", type: "middle", reason: "石化能源容量核心，观察能源线扩散" }
   ]
 };
 
@@ -255,6 +353,8 @@ let settings = loadSettings();
 let auctionSnapshots = loadAuctionSnapshots();
 let ignoredRadarCodes = loadIgnoredRadarCodes();
 let reviewLogs = loadReviewLogs();
+let flowSnapshots = loadFlowSnapshots();
+let collapsedPanelIds = loadCollapsedPanels();
 let activeFilter = "all";
 let editingCode = null;
 let autoRefresh = true;
@@ -267,6 +367,8 @@ const rowsEl = document.getElementById("stockRows");
 const refreshBtn = document.getElementById("refreshBtn");
 const autoToggleBtn = document.getElementById("autoToggleBtn");
 const addOpenBtn = document.getElementById("addOpenBtn");
+const collapseAllBtn = document.getElementById("collapseAllBtn");
+const expandAllBtn = document.getElementById("expandAllBtn");
 const dialog = document.getElementById("stockDialog");
 const closeDialogBtn = document.getElementById("closeDialogBtn");
 const form = document.getElementById("stockForm");
@@ -285,6 +387,9 @@ const versionPill = document.getElementById("versionPill");
 const marketEnvPulse = document.getElementById("marketEnvPulse");
 const marketStatePill = document.getElementById("marketStatePill");
 const marketRows = document.getElementById("marketRows");
+const flowPulse = document.getElementById("flowPulse");
+const flowRows = document.getElementById("flowRows");
+const flowTimelineRows = document.getElementById("flowTimelineRows");
 const goldRows = document.getElementById("goldRows");
 const goldPulse = document.getElementById("goldPulse");
 const goldRefreshBtn = document.getElementById("goldRefreshBtn");
@@ -334,6 +439,7 @@ const fields = {
 
 versionPill.textContent = APP_VERSION;
 syncSettingsForm();
+setupCollapsiblePanels();
 render();
 refreshQuotes();
 refreshGold(true);
@@ -367,6 +473,8 @@ resetSettingsBtn.addEventListener("click", () => {
   refreshRadar(true);
   restartAutoRefresh();
 });
+collapseAllBtn.addEventListener("click", () => setAllPanelsCollapsed(true));
+expandAllBtn.addEventListener("click", () => setAllPanelsCollapsed(false));
 autoToggleBtn.addEventListener("click", () => {
   autoRefresh = !autoRefresh;
   autoToggleBtn.classList.toggle("auto-on", autoRefresh);
@@ -440,7 +548,7 @@ form.addEventListener("submit", async (event) => {
       theme: fields.theme.value || resolved.theme || "其他",
       note: fields.note.value.trim() || resolved.note || ""
     };
-    item.theme = item.theme === "其他" ? inferTheme(item.name, item.note) : item.theme;
+    item.theme = normalizeTheme(item.theme, item.name, item.note);
 
     let quote = null;
     try {
@@ -512,6 +620,7 @@ function handleRadarClick(event) {
     radarItems = radarItems.filter((radarItem) => radarItem.code !== code);
     renderRadar();
     renderThemeRadar();
+    renderCapitalFlows();
     updateMetrics();
   }
 }
@@ -563,7 +672,7 @@ document.addEventListener("visibilitychange", () => {
 function loadStocks() {
   try {
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    return Array.isArray(stored) && stored.length ? stored : structuredClone(seedStocks);
+    return Array.isArray(stored) && stored.length ? stored.map(normalizeStock) : structuredClone(seedStocks);
   } catch {
     return structuredClone(seedStocks);
   }
@@ -605,6 +714,24 @@ function loadReviewLogs() {
   }
 }
 
+function loadFlowSnapshots() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(FLOW_SNAPSHOT_STORAGE_KEY));
+    return stored && typeof stored === "object" ? stored : {};
+  } catch {
+    return {};
+  }
+}
+
+function loadCollapsedPanels() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(COLLAPSE_STORAGE_KEY));
+    return new Set(Array.isArray(stored) ? stored.map(String) : []);
+  } catch {
+    return new Set();
+  }
+}
+
 function saveStocks() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(stocks));
 }
@@ -623,6 +750,59 @@ function saveIgnoredRadarCodes() {
 
 function saveReviewLogs() {
   localStorage.setItem(REVIEW_LOG_STORAGE_KEY, JSON.stringify(reviewLogs.slice(0, 160)));
+}
+
+function saveFlowSnapshots() {
+  localStorage.setItem(FLOW_SNAPSHOT_STORAGE_KEY, JSON.stringify(flowSnapshots));
+}
+
+function saveCollapsedPanels() {
+  localStorage.setItem(COLLAPSE_STORAGE_KEY, JSON.stringify([...collapsedPanelIds]));
+}
+
+function setupCollapsiblePanels() {
+  getCollapsiblePanels().forEach((panel) => {
+    const id = panel.dataset.collapseId;
+    const head = [...panel.children].find((child) => child.classList?.contains("panel-head"));
+    if (!id || !head || head.querySelector(".panel-collapse-button")) return;
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "panel-collapse-button";
+    button.dataset.collapseTarget = id;
+    button.addEventListener("click", () => setPanelCollapsed(id, !collapsedPanelIds.has(id)));
+    head.appendChild(button);
+    applyPanelCollapsedState(panel, collapsedPanelIds.has(id));
+  });
+}
+
+function getCollapsiblePanels() {
+  return [...document.querySelectorAll("[data-collapse-id]")];
+}
+
+function setPanelCollapsed(id, collapsed) {
+  const panel = document.querySelector(`[data-collapse-id="${id}"]`);
+  if (!panel) return;
+  if (collapsed) collapsedPanelIds.add(id);
+  else collapsedPanelIds.delete(id);
+  applyPanelCollapsedState(panel, collapsed);
+  saveCollapsedPanels();
+}
+
+function setAllPanelsCollapsed(collapsed) {
+  const panels = getCollapsiblePanels();
+  collapsedPanelIds = new Set(collapsed ? panels.map((panel) => panel.dataset.collapseId).filter(Boolean) : []);
+  panels.forEach((panel) => applyPanelCollapsedState(panel, collapsed));
+  saveCollapsedPanels();
+}
+
+function applyPanelCollapsedState(panel, collapsed) {
+  panel.classList.toggle("collapsed", collapsed);
+  const button = panel.querySelector(".panel-collapse-button");
+  if (!button) return;
+  button.textContent = collapsed ? "展开" : "收起";
+  button.title = collapsed ? "展开模块" : "收起模块";
+  button.setAttribute("aria-expanded", String(!collapsed));
 }
 
 function syncSettingsForm() {
@@ -732,9 +912,7 @@ function getStockDirectory() {
     const current = directory.get(code);
     const name = stock.name || current?.name || code;
     const note = stock.note || current?.note || "";
-    const theme = stock.theme && stock.theme !== "其他"
-      ? stock.theme
-      : current?.theme || inferTheme(name, note);
+    const theme = normalizeTheme(stock.theme, name, note, current?.theme);
     const aliases = [...new Set([...(current?.aliases || []), name, ...(stock.aliases || [])].filter(Boolean))];
     directory.set(code, { code, name, theme, note, aliases });
   });
@@ -799,6 +977,7 @@ function render() {
   renderCoreRoles();
   renderRadar();
   renderThemeRadar();
+  renderCapitalFlows();
   renderAuction();
   renderReviewModule();
 }
@@ -818,6 +997,7 @@ function renderRow(stock) {
   const discipline = getDiscipline(analysis);
   const klineStatus = getKlineStatus(quote, technical);
   const buyGate = getBuyGate(stock, quote, technical, analysis);
+  const buyLights = getBuyLights(stock, quote, technical, analysis);
   const dataQuality = analysis.dataQuality;
   const tradeBrief = getTradeBrief(stock, quote, technical, analysis, buyGate);
   const coreRole = getStockCoreRole(stock.code, stock.theme);
@@ -889,6 +1069,8 @@ function renderRow(stock) {
             ${buyGate.gaps.map((gap) => `<span>${escapeHtml(gap)}</span>`).join("")}
           </div>
         </div>
+
+        ${renderBuyLights(buyLights)}
 
         <div class="trade-brief ${tradeBrief.level}">
           <div>
@@ -1435,10 +1617,22 @@ async function refreshThemes(force = false) {
 
 function renderThemes() {
   if (!themeRows) return;
+  const radarGroups = buildThemeRadarGroups();
+  const radarMap = new Map(radarGroups.map((group) => [group.name, group]));
   const entries = Object.keys(themeStrength)
     .filter((theme) => theme !== "其他")
-    .map((theme) => ({ theme, ...(themeState[theme] || { strength: themeStrength[theme], change: 0, board: "等待刷新", source: "默认" }) }))
-    .sort((a, b) => b.strength - a.strength || b.change - a.change)
+    .map((theme) => {
+      const state = themeState[theme] || { strength: themeStrength[theme], change: 0, board: "等待刷新", source: "默认" };
+      const profile = getThemeProfile(theme);
+      const gate = getThemeGate(theme, state, radarMap.get(theme));
+      return {
+        theme,
+        ...state,
+        laneLabel: profile.lane,
+        displayScore: state.strength * 20 + Math.max(state.change || 0, 0) * 2 + profile.priority + gate.scoreAdjust
+      };
+    })
+    .sort((a, b) => b.displayScore - a.displayScore || b.strength - a.strength || b.change - a.change)
     .slice(0, 8);
 
   if (!entries.length) {
@@ -1451,9 +1645,10 @@ function renderThemes() {
   themeRows.innerHTML = entries.map((item) => {
     const cls = item.strength >= 5 ? "hot" : item.strength >= 4 ? "ok" : "wait";
     const width = clamp(item.strength * 20, 12, 100);
+    const profile = getThemeProfile(item.theme);
     return `
-      <div class="theme-row ${cls}">
-        <strong>${escapeHtml(item.theme)}</strong>
+      <div class="theme-row ${cls} ${profile.className}">
+        <strong>${escapeHtml(item.theme)}<em>${escapeHtml(profile.lane)}</em></strong>
         <div class="strength-bar"><i style="width:${width}%"></i></div>
         <span>${item.strength}/5 · ${signed(item.change)}%</span>
       </div>
@@ -1463,7 +1658,7 @@ function renderThemes() {
 
 function renderCoreRoles() {
   if (!coreRows) return;
-  const themes = getLeadingThemes(8);
+  const themes = getLeadingThemes();
   if (!themes.length) {
     coreRows.innerHTML = `<div class="empty">等待主线刷新。中军看持续性，龙头看弹性，后排只做跟踪。</div>`;
     return;
@@ -1471,7 +1666,7 @@ function renderCoreRoles() {
 
   const updated = themeFetchedAt ? new Date(themeFetchedAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }) : "--";
   const top = themes[0];
-  corePulse.textContent = `${top.rankLabel}：${top.theme} · ${top.strength}/5 · ${updated}`;
+  corePulse.textContent = `${top.laneLabel} · ${top.rankLabel}：${top.theme} · ${top.strength}/5 · ${updated}`;
 
   coreRows.innerHTML = themes.map((themeItem) => {
     const cls = themeItem.rankLabel === "当前领涨" ? "hot" : themeItem.rankLabel === "强观察" ? "watch" : "wait";
@@ -1481,9 +1676,9 @@ function renderCoreRoles() {
         <div class="core-card-head">
           <div>
             <strong>${escapeHtml(themeItem.theme)}</strong>
-            <span>${themeItem.rankLabel} · 强度 ${themeItem.strength}/5 · 板块 ${signed(themeItem.change)}%</span>
+            <span>${themeItem.laneLabel} · ${themeItem.rankLabel} · 强度 ${themeItem.strength}/5 · 板块 ${signed(themeItem.change)}%</span>
           </div>
-          <span class="core-rank ${cls}">${themeItem.radarLevel || themeItem.source}</span>
+          <span class="core-rank ${cls}">${themeItem.gateLabel || themeItem.radarLevel || themeItem.source}</span>
         </div>
         <div class="core-stock-list">
           ${candidates.map((item) => renderCoreStock(item, themeItem.theme)).join("")}
@@ -1512,24 +1707,30 @@ function renderCoreStock(item, theme) {
   `;
 }
 
-function getLeadingThemes(limit = 4) {
+function getLeadingThemes(limit = Object.keys(themeCoreMap).length) {
   const radarGroups = buildThemeRadarGroups();
   const radarMap = new Map(radarGroups.map((group) => [group.name, group]));
   return Object.keys(themeCoreMap)
     .map((theme) => {
       const state = themeState[theme] || { strength: themeStrength[theme] || 2, change: 0, board: "等待刷新", source: "默认" };
       const radar = radarMap.get(theme);
+      const profile = getThemeProfile(theme);
+      const gate = getThemeGate(theme, state, radar);
       const radarBoost = radar
         ? radar.count * 8 + Math.max(radar.mainInflowYi, 0) * 2 + Math.max(radar.avgChange, 0) * 1.5 + (radar.level === "强共振" ? 14 : 0)
         : 0;
-      const dynamicScore = state.strength * 20 + Math.max(state.change || 0, 0) * 2 + radarBoost;
+      const dynamicScore = state.strength * 20 + Math.max(state.change || 0, 0) * 2 + radarBoost + profile.priority + gate.scoreAdjust;
       const hasDynamicSignal = state.source === "动态" || Boolean(radar);
       let rankLabel = "静态核心";
-      if (hasDynamicSignal && dynamicScore >= 92) rankLabel = "当前领涨";
+      if (gate.rotation && !gate.ok) rankLabel = "轮动观察";
+      else if (hasDynamicSignal && dynamicScore >= 92) rankLabel = "当前领涨";
       else if (hasDynamicSignal && dynamicScore >= 74) rankLabel = "强观察";
       else if (hasDynamicSignal) rankLabel = "观察";
       return {
         theme,
+        laneLabel: profile.lane,
+        gateLabel: gate.label,
+        rotationGateOk: gate.ok,
         strength: state.strength,
         change: state.change || 0,
         source: state.source || "默认",
@@ -1560,7 +1761,49 @@ function getStockCoreRole(code, theme = "") {
   return null;
 }
 
+function getThemeProfile(theme) {
+  return themeProfiles[theme] || { lane: "观察", className: "neutral", priority: 0, minBuyStrength: 4 };
+}
+
+function isRotationTheme(theme) {
+  return getThemeProfile(theme).lane === "轮动观察";
+}
+
+function getThemeRadarGroup(theme) {
+  return buildThemeRadarGroups().find((group) => group.name === theme) || null;
+}
+
+function getThemeGate(theme, state = null, radar = null) {
+  const profile = getThemeProfile(theme);
+  const currentState = state || themeState[theme] || { strength: themeStrength[theme] || 2, change: 0, source: "默认" };
+  const currentRadar = radar || getThemeRadarGroup(theme);
+  if (!isRotationTheme(theme)) {
+    return { ok: true, rotation: false, label: profile.lane, scoreAdjust: 0 };
+  }
+
+  const boardStrong = currentState.source === "动态" && currentState.strength >= 4 && (currentState.change || 0) >= 1.5;
+  const radarStrong = Boolean(currentRadar && (
+    currentRadar.level === "强共振" ||
+    currentRadar.count >= 3 ||
+    currentRadar.mainInflowYi >= 5
+  ));
+  const confirmed = currentState.strength >= profile.minBuyStrength || (currentState.strength >= 4 && (boardStrong || radarStrong));
+
+  return {
+    ok: confirmed,
+    rotation: true,
+    label: confirmed ? "轮动确认" : "轮动观察",
+    scoreAdjust: confirmed ? 0 : -24
+  };
+}
+
 function getCoreThemeAdvice(themeItem) {
+  if (themeItem.laneLabel === "轮动观察" && !themeItem.rotationGateOk) {
+    return "非主攻方向只做观察，至少等板块强度、资金共振和核心股趋势同时确认。";
+  }
+  if (themeItem.laneLabel === "轮动观察") {
+    return "轮动已确认也先看中军承接，不用它替代科技主线仓位，错了快速降级。";
+  }
   if (themeItem.rankLabel === "当前领涨") {
     return "先看中军是否放量站稳，再看龙头弹性；中军破位则降级，不追后排。";
   }
@@ -1882,8 +2125,12 @@ function getThemeDetail(theme) {
 
 function marketAllowsBuy(theme) {
   if (!settings.requireMarketConfirm) return true;
-  const themeOk = getThemeStrength(theme) >= 3;
-  const marketOk = !marketState || marketState.level !== "weak";
+  const marketOk = Boolean(marketState) && marketState.level !== "weak";
+  const profile = getThemeProfile(theme);
+  if (isRotationTheme(theme)) {
+    return marketOk && getThemeGate(theme).ok;
+  }
+  const themeOk = getThemeStrength(theme) >= profile.minBuyStrength;
   return themeOk && marketOk;
 }
 
@@ -1942,8 +2189,11 @@ async function refreshRadar(force = false) {
   radarPulse.textContent = radarItems.length
     ? `已筛出 ${radarItems.length} 只 · 忽略 ${ignoredRadarCodes.size} 只 · 深度 ${getRadarDepthText()} · ${time}`
     : `暂无主板大市值异动 · 忽略 ${ignoredRadarCodes.size} 只 · 深度 ${getRadarDepthText()} · ${time}`;
+  const flowGroups = getCapitalFlowGroups();
+  captureCapitalFlowSnapshot(flowGroups);
   renderRadar();
   renderThemeRadar();
+  renderCapitalFlows(flowGroups);
   renderCoreRoles();
   updateMetrics();
 }
@@ -2032,6 +2282,221 @@ function renderThemeRadar() {
       </article>
     `;
   }).join("");
+}
+
+function getCapitalFlowGroups() {
+  return buildThemeRadarGroups()
+    .sort((a, b) => (
+      (b.mainInflowYi - a.mainInflowYi) ||
+      (b.amountYi - a.amountYi) ||
+      (b.avgChange - a.avgChange) ||
+      (b.count - a.count)
+    ))
+    .slice(0, 6);
+}
+
+function renderCapitalFlows(groups = getCapitalFlowGroups()) {
+  if (!flowRows || !flowPulse) return;
+  const time = radarFetchedAt ? new Date(radarFetchedAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }) : "--";
+
+  if (!groups.length) {
+    flowPulse.textContent = radarFetchedAt ? `暂无明确方向 · ${time}` : "等待资金雷达扫描";
+    flowRows.innerHTML = `<div class="empty flow-empty">暂无资金方向。先看市场环境，等大市值资金异动出现。</div>`;
+    renderCapitalFlowTimeline();
+    return;
+  }
+
+  const inflowCount = groups.filter((group) => group.mainInflowYi > 0).length;
+  const top = groups[0];
+  flowPulse.textContent = `流向 ${inflowCount}/${groups.length} 条 · 最强 ${top.name} · ${time}`;
+  flowRows.innerHTML = groups.map((group) => {
+    const profile = getThemeProfile(group.name);
+    const gate = getThemeGate(group.name, themeState[group.name], group);
+    const lane = gate.rotation ? gate.label : profile.lane;
+    const flowClass = group.level === "强共振" || gate.label === "轮动确认"
+      ? "hot"
+      : group.level === "分歧" || group.mainInflowYi < 0
+        ? "warn"
+        : "watch";
+    const width = clamp(Math.min(Math.abs(group.mainInflowYi) * 8 + group.count * 8, 100), 10, 100);
+    return `
+      <article class="flow-card ${flowClass} ${profile.className}">
+        <div class="flow-card-head">
+          <div>
+            <strong>${escapeHtml(group.name)}</strong>
+            <span>${escapeHtml(lane)} · ${group.count}只异动</span>
+          </div>
+          <b class="${getChangeClass(group.mainInflowYi)}">${signed(group.mainInflowYi)}亿</b>
+        </div>
+        <div class="flow-bar"><i style="width:${width}%"></i></div>
+        <div class="flow-meta">
+          <span>成交 ${group.amountYi.toFixed(1)}亿</span>
+          <span class="${getChangeClass(group.avgChange)}">均涨 ${signed(group.avgChange)}%</span>
+          <span>${escapeHtml(group.level)}</span>
+        </div>
+        <p>${group.names.map(escapeHtml).join(" / ")}</p>
+      </article>
+    `;
+  }).join("");
+  renderCapitalFlowTimeline();
+}
+
+function captureCapitalFlowSnapshot(groups = getCapitalFlowGroups(), at = Date.now()) {
+  const dayKey = getLocalDateKey(new Date(at));
+  const rows = groups.slice(0, 6).map((group) => ({
+    name: group.name,
+    count: group.count,
+    mainInflowYi: Number((group.mainInflowYi || 0).toFixed(2)),
+    amountYi: Number((group.amountYi || 0).toFixed(1)),
+    avgChange: Number((group.avgChange || 0).toFixed(2)),
+    level: group.level,
+    names: group.names.slice(0, 4)
+  }));
+
+  const snapshot = {
+    at,
+    minute: getMinutesOfDay(new Date(at)),
+    time: getLocalMinute(new Date(at)),
+    topName: rows[0]?.name || "无明确方向",
+    groups: rows
+  };
+
+  const list = Array.isArray(flowSnapshots[dayKey]) ? flowSnapshots[dayKey] : [];
+  const last = list[list.length - 1];
+  if (last && at - last.at < 4 * 60 * 1000 && last.topName === snapshot.topName) {
+    list[list.length - 1] = snapshot;
+  } else {
+    list.push(snapshot);
+  }
+
+  flowSnapshots[dayKey] = list.slice(-80);
+  pruneFlowSnapshots();
+  saveFlowSnapshots();
+}
+
+function renderCapitalFlowTimeline() {
+  if (!flowTimelineRows) return;
+  const snapshots = getTodayFlowSnapshots();
+  const latest = snapshots[snapshots.length - 1] || null;
+  const slotSnapshots = FLOW_TIMELINE_SLOTS.map((slot) => ({
+    slot,
+    snapshot: getFlowSnapshotForSlot(snapshots, slot)
+  }));
+  const latestEntry = latest
+    ? { slot: { key: "latest", label: "最新", note: latest.time }, snapshot: latest, latest: true }
+    : null;
+  const entries = latestEntry ? [...slotSnapshots, latestEntry] : slotSnapshots;
+
+  if (!snapshots.length) {
+    flowTimelineRows.innerHTML = `
+      <div class="flow-timeline-head">
+        <strong>资金时间轴</strong>
+        <span>等待雷达刷新后自动记录</span>
+      </div>
+      <div class="flow-timeline-list">
+        ${entries.map((entry) => renderFlowTimelineCard(entry, null)).join("")}
+      </div>
+    `;
+    return;
+  }
+
+  flowTimelineRows.innerHTML = `
+    <div class="flow-timeline-head">
+      <strong>资金时间轴</strong>
+      <span>${snapshots.length} 个快照 · 最近 ${latest?.time || "--"}</span>
+    </div>
+    <div class="flow-timeline-list">
+      ${entries.map((entry, index) => renderFlowTimelineCard(entry, getPreviousTimelineSnapshot(entries, index))).join("")}
+    </div>
+  `;
+}
+
+function renderFlowTimelineCard(entry, previousSnapshot) {
+  const { slot, snapshot, latest = false } = entry;
+  if (!snapshot) {
+    return `
+      <article class="flow-time-card empty-slot">
+        <div class="flow-time-head">
+          <strong>${slot.label}</strong>
+          <span>${slot.note}</span>
+        </div>
+        <p>待快照</p>
+        <small>雷达刷新后记录</small>
+      </article>
+    `;
+  }
+
+  const top = snapshot.groups[0];
+  const status = getFlowSnapshotStatus(snapshot, previousSnapshot);
+  const statusClass = getFlowStatusClass(status);
+  return `
+    <article class="flow-time-card ${statusClass} ${latest ? "latest" : ""}">
+      <div class="flow-time-head">
+        <strong>${slot.label}</strong>
+        <span>${slot.note}</span>
+      </div>
+      <div class="flow-time-main">
+        <b>${escapeHtml(top?.name || "无明确方向")}</b>
+        <span class="flow-time-status">${status}</span>
+      </div>
+      <div class="flow-time-stats">
+        <span>主力 ${signed(top?.mainInflowYi)}亿</span>
+        <span>均涨 ${signed(top?.avgChange)}%</span>
+      </div>
+      <small>${escapeHtml((top?.names || []).join(" / ") || "暂无代表股")}</small>
+    </article>
+  `;
+}
+
+function getFlowSnapshotStatus(snapshot, previousSnapshot) {
+  const top = snapshot.groups[0];
+  const previousTop = previousSnapshot?.groups?.[0];
+  if (!top) return "无方向";
+  if (top.mainInflowYi < 0 || top.avgChange < -0.5 || top.level === "分歧") return "资金分歧";
+  if (!previousTop) return top.level === "强共振" ? "强共振" : "初始流入";
+  if (top.name !== previousTop.name) return "方向切换";
+  if (top.mainInflowYi >= previousTop.mainInflowYi + 1 && top.avgChange >= previousTop.avgChange - 0.4) return "持续流入";
+  if (top.avgChange <= previousTop.avgChange - 1 && top.mainInflowYi <= previousTop.mainInflowYi + 0.5) return "冲高回落";
+  if (snapshot.minute >= 14 * 60 + 20 && top.mainInflowYi > previousTop.mainInflowYi) return "尾盘抢筹";
+  return top.level === "强共振" ? "强共振" : "观察延续";
+}
+
+function getFlowStatusClass(status) {
+  if (["持续流入", "强共振", "尾盘抢筹"].includes(status)) return "hot";
+  if (["资金分歧", "冲高回落"].includes(status)) return "warn";
+  if (status === "方向切换") return "switch";
+  return "watch";
+}
+
+function getFlowSnapshotForSlot(snapshots, slot) {
+  const matched = snapshots
+    .filter((snapshot) => snapshot.minute >= slot.start && snapshot.minute <= slot.end)
+    .sort((a, b) => Math.abs(a.minute - slot.target) - Math.abs(b.minute - slot.target));
+  return matched[0] || null;
+}
+
+function getPreviousTimelineSnapshot(entries, index) {
+  for (let i = index - 1; i >= 0; i -= 1) {
+    if (entries[i].snapshot) return entries[i].snapshot;
+  }
+  return null;
+}
+
+function getTodayFlowSnapshots() {
+  const rows = flowSnapshots[getLocalDateKey()] || [];
+  return Array.isArray(rows) ? rows.slice().sort((a, b) => a.at - b.at) : [];
+}
+
+function pruneFlowSnapshots() {
+  const keys = Object.keys(flowSnapshots).sort();
+  while (keys.length > 5) {
+    const oldest = keys.shift();
+    delete flowSnapshots[oldest];
+  }
+}
+
+function getMinutesOfDay(date = new Date()) {
+  return date.getHours() * 60 + date.getMinutes();
 }
 
 function buildThemeRadarGroups() {
@@ -2909,6 +3374,130 @@ function getBuyGate(stock, quote, technical, analysis) {
   };
 }
 
+function getBuyLights(stock, quote, technical, analysis) {
+  const dataOk = !analysis.dataQuality?.blockBuy;
+  const trendOk = Boolean(quote && technical && analysis.trend.strong);
+  const volumeOk = Boolean(quote && (analysis.volume.hot || analysis.volume.label === "缩量强势"));
+  const themeOk = analysis.themeStrength >= 4;
+  const envOk = marketAllowsBuy(stock.theme);
+  const riskOk = analysis.risk.level === "ok";
+  const shape = getShapeLight(quote, technical, analysis);
+  const rotationGate = isRotationTheme(stock.theme) ? getThemeGate(stock.theme) : null;
+
+  const lights = [
+    {
+      key: "trend",
+      label: "趋势",
+      state: getLightState(trendOk, !quote || !technical),
+      detail: quote && technical ? `${analysis.trend.label} · ${analysis.trend.detail}` : "等行情/K线"
+    },
+    {
+      key: "volume",
+      label: "量能",
+      state: analysis.volume.danger ? "block" : getLightState(volumeOk, !quote),
+      detail: quote ? `${analysis.volume.label} · ${analysis.volume.detail}` : "等成交量"
+    },
+    {
+      key: "theme",
+      label: "主线",
+      state: getLightState(themeOk, !themeState[stock.theme]),
+      detail: `${stock.theme} · 强度 ${analysis.themeStrength}/5`
+    },
+    {
+      key: "market",
+      label: "环境",
+      state: getLightState(envOk, !marketState),
+      detail: rotationGate && !rotationGate.ok ? "等轮动确认" : marketState ? `${marketState.label} · ${marketState.upCount}/3指数上涨` : "等指数刷新"
+    },
+    {
+      key: "risk",
+      label: "风控",
+      state: riskOk ? "pass" : "block",
+      detail: `${analysis.risk.label} · ${analysis.risk.detail}`
+    },
+    shape
+  ];
+
+  const passCount = lights.filter((item) => item.state === "pass").length;
+  return {
+    dataGate: {
+      label: "数据闸门",
+      state: dataOk ? "pass" : "block",
+      detail: analysis.dataQuality?.detail || "等待数据",
+      status: dataOk ? "通过" : "阻断"
+    },
+    lights,
+    passCount,
+    total: lights.length,
+    allPass: dataOk && passCount === lights.length
+  };
+}
+
+function getShapeLight(quote, technical, analysis) {
+  if (!quote || !technical) {
+    return { key: "shape", label: "形态", state: "wait", detail: "等行情/K线" };
+  }
+
+  const price = quote.price || technical.latest.close;
+  const nearHigh = technical.recent20High && price >= technical.recent20High * 0.985;
+  const nearMa10 = technical.ma10 && Math.abs(price / technical.ma10 - 1) <= 0.025;
+  const nearMa20 = technical.ma20 && Math.abs(price / technical.ma20 - 1) <= 0.025;
+  const weakToStrong = quote.changePercent > 2 && technical.ma5 && price > technical.ma5;
+
+  if (analysis.point.side === "买点") {
+    return { key: "shape", label: "形态", state: "pass", detail: analysis.point.label };
+  }
+  if (analysis.volume.hot && nearHigh) {
+    return { key: "shape", label: "形态", state: "pass", detail: "接近20日高点" };
+  }
+  if (analysis.volume.label === "缩量强势" && (nearMa10 || nearMa20)) {
+    return { key: "shape", label: "形态", state: "pass", detail: nearMa10 ? "缩量回踩MA10" : "缩量回踩MA20" };
+  }
+  if (weakToStrong && analysis.volume.hot) {
+    return { key: "shape", label: "形态", state: "pass", detail: "弱转强形态" };
+  }
+  if (analysis.volume.hot) {
+    return { key: "shape", label: "形态", state: "wait", detail: "差突破确认" };
+  }
+  if (analysis.volume.label === "缩量强势") {
+    return { key: "shape", label: "形态", state: "wait", detail: "差回踩位置" };
+  }
+  return { key: "shape", label: "形态", state: "wait", detail: "等突破或回踩" };
+}
+
+function getLightState(pass, waiting = false) {
+  if (pass) return "pass";
+  return waiting ? "wait" : "wait";
+}
+
+function renderBuyLights(buyLights) {
+  const status = buyLights.allPass
+    ? "六灯全亮"
+    : buyLights.dataGate.state === "block"
+      ? "数据阻断"
+      : `${buyLights.passCount}/${buyLights.total} 通过`;
+  return `
+    <section class="buy-light-panel ${buyLights.allPass ? "all-pass" : buyLights.dataGate.state === "block" ? "blocked" : "partial"}">
+      <div class="buy-light-head">
+        <div>
+          <strong>买点六灯</strong>
+          <span>${status}</span>
+        </div>
+        <span class="data-gate ${buyLights.dataGate.state}">${buyLights.dataGate.label}：${buyLights.dataGate.status}</span>
+      </div>
+      <div class="buy-light-grid">
+        ${buyLights.lights.map((item) => `
+          <div class="buy-light ${item.state}">
+            <b>${escapeHtml(item.label)}</b>
+            <span>${item.state === "pass" ? "亮" : item.state === "block" ? "阻断" : "待补"}</span>
+            <small>${escapeHtml(item.detail)}</small>
+          </div>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
 function getTradeBrief(stock, quote, technical, analysis, buyGate) {
   const watchReasons = [];
   const radarHit = radarItems.find((item) => item.code === stock.code);
@@ -2938,7 +3527,7 @@ function getTradeBrief(stock, quote, technical, analysis, buyGate) {
   if (technical?.ma20) sellRules.push(`收盘跌破MA20 ${formatMoney(technical.ma20)}`);
   else sellRules.push("跌破关键均线且次日不修复");
   if (analysis.volume.danger) sellRules.push("放量分歧");
-  if (stock.target) sellRules.push(`到目标${formatMoney(stock.target)}先分批`);
+  if (stock.target) sellRules.push(`到目标${formatMoney(stock.target)}先分批，剩余看趋势`);
 
   return {
     level: analysis.point.side === "买点" ? "buy" : analysis.point.side === "卖点" ? "sell" : analysis.score >= 70 ? "watch" : "wait",
@@ -3109,16 +3698,28 @@ function getDiscipline(analysis) {
 
 function normalizeStock(stock) {
   const note = stock.note || "";
+  const name = stock.name || stock.code;
   return {
     code: stock.code,
-    name: stock.name || stock.code,
+    name,
     cost: stock.cost ?? "",
     target: stock.target ?? "",
     stop: stock.stop ?? "",
     group: stock.group || "watch",
-    theme: stock.theme || inferTheme(stock.name, note),
+    theme: normalizeTheme(stock.theme, name, note),
     note
   };
+}
+
+function normalizeTheme(theme, name = "", note = "", fallbackTheme = "其他") {
+  const current = theme && theme !== "其他" ? theme : fallbackTheme;
+  const inferred = inferTheme(name, note);
+
+  if (inferred === "风电设备" && (!current || current === "其他" || current === "半导体设备")) {
+    return inferred;
+  }
+  if (!current || current === "其他") return inferred;
+  return current;
 }
 
 function normalizeBoardName(value) {
@@ -3142,7 +3743,12 @@ function inferTheme(name = "", note = "") {
   if (/工业富联|服务器|算力|AI/.test(text)) return "AI算力/服务器";
   if (/中际|新易盛|天孚|CPO|光模块|光互联/.test(text)) return "光模块/CPO";
   if (/存储|HBM|DRAM|NAND|香农|深科技|江波龙/.test(text)) return "HBM/存储";
-  if (/北方华创|设备|刻蚀|清洗|CVD|PVD/.test(text)) return "半导体设备";
+  if (/金风科技|明阳智能|大金重工|天顺风能|东方电气|日月股份|东方电缆|风电|风机|风塔|叶片|海上风电/.test(text)) return "风电设备";
+  if (/北方华创|至纯科技|万业企业|长川科技|半导体设备|刻蚀|光刻|清洗设备|离子注入|薄膜沉积|测试设备|CVD|PVD/.test(text)) return "半导体设备";
+  if (/山东黄金|中金黄金|赤峰黄金|湖南黄金|银泰黄金|黄金|贵金属|白银|金矿/.test(text)) return "贵金属/黄金";
+  if (/北方稀土|中国稀土|盛和资源|厦门钨业|横店东磁|中科三环|稀土|永磁|钨/.test(text)) return "稀土永磁";
+  if (/紫金矿业|江西铜业|中国铝业|云铝|洛阳钼业|铜陵有色|神火|有色|工业金属|铜|铝|锌|镍|钼|钴/.test(text)) return "有色金属";
+  if (/中国神华|陕西煤业|兖矿能源|中煤能源|中国石油|中国石化|中国海油|煤炭|能源|石油|天然气|油气/.test(text)) return "煤炭能源";
   if (/鼎龙|CMP|材料|靶材|硅片|飞凯|雅克|立昂/.test(text)) return "半导体材料";
   if (/封装|Chiplet|玻璃基板/.test(text)) return "先进封装";
   if (/特气|六氟化钨|氦|气/.test(text)) return "电子特气";

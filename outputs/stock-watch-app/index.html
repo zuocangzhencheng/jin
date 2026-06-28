@@ -15,6 +15,8 @@
       </div>
       <div class="toolbar">
         <span class="version-pill" id="versionPill">v--</span>
+        <button class="ghost-button compact-button" id="collapseAllBtn" type="button">折叠</button>
+        <button class="ghost-button compact-button" id="expandAllBtn" type="button">展开</button>
         <button class="icon-button" id="refreshBtn" title="刷新行情" aria-label="刷新行情">↻</button>
         <button class="ghost-button auto-on" id="autoToggleBtn" type="button">自动中</button>
         <button class="primary-button" id="addOpenBtn">新增</button>
@@ -48,7 +50,7 @@
       </div>
     </section>
 
-    <section class="panel gold-panel" aria-label="黄金价格">
+    <section class="panel gold-panel" aria-label="黄金价格" data-collapse-id="gold">
       <div class="panel-head">
         <div>
           <h2>黄金价格</h2>
@@ -60,7 +62,7 @@
     </section>
 
     <section class="insight-grid" aria-label="市场与策略">
-      <section class="panel market-panel" aria-label="市场环境">
+      <section class="panel market-panel" aria-label="市场环境" data-collapse-id="market">
         <div class="panel-head compact">
           <div>
             <h2>市场环境</h2>
@@ -69,9 +71,17 @@
           <span class="state-pill" id="marketStatePill">--</span>
         </div>
         <div class="market-strip" id="marketRows"></div>
+        <div class="flow-block" aria-label="资金流向">
+          <div class="flow-block-head">
+            <strong>资金流向</strong>
+            <span id="flowPulse">等待资金雷达扫描</span>
+          </div>
+          <div class="flow-list" id="flowRows"></div>
+          <div class="flow-timeline" id="flowTimelineRows"></div>
+        </div>
       </section>
 
-      <section class="panel theme-panel" aria-label="主线强度">
+      <section class="panel theme-panel" aria-label="主线强度" data-collapse-id="theme">
         <div class="panel-head compact">
           <div>
             <h2>主线强度</h2>
@@ -81,7 +91,7 @@
         <div class="theme-list" id="themeRows"></div>
       </section>
 
-      <section class="panel settings-panel" aria-label="策略设置">
+      <section class="panel settings-panel" aria-label="策略设置" data-collapse-id="settings">
         <div class="panel-head compact">
           <div>
             <h2>策略设置</h2>
@@ -122,17 +132,17 @@
       </section>
     </section>
 
-    <section class="panel core-panel" aria-label="中军龙头自动切换">
+    <section class="panel core-panel" aria-label="中军龙头自动切换" data-collapse-id="core">
       <div class="panel-head">
         <div>
           <h2>中军 / 龙头</h2>
-          <p id="corePulse">领涨优先展示，兼顾主线核心池</p>
+          <p id="corePulse">主攻科技优先，轮动强确认</p>
         </div>
       </div>
       <div class="core-list" id="coreRows"></div>
     </section>
 
-    <section class="panel radar-panel" aria-label="资金异动雷达">
+    <section class="panel radar-panel" aria-label="资金异动雷达" data-collapse-id="radar">
       <div class="panel-head">
         <div>
           <h2>资金异动雷达</h2>
@@ -146,7 +156,7 @@
       <div class="radar-list" id="radarRows"></div>
     </section>
 
-    <section class="panel theme-radar-panel" aria-label="主线聚合雷达">
+    <section class="panel theme-radar-panel" aria-label="主线聚合雷达" data-collapse-id="theme-radar">
       <div class="panel-head">
         <div>
           <h2>主线聚合雷达</h2>
@@ -156,7 +166,7 @@
       <div class="theme-radar-list" id="themeRadarRows"></div>
     </section>
 
-    <section class="panel auction-panel" aria-label="集合竞价观察">
+    <section class="panel auction-panel" aria-label="集合竞价观察" data-collapse-id="auction">
       <div class="panel-head">
         <div>
           <h2>集合竞价观察</h2>
@@ -167,7 +177,7 @@
       <div class="auction-list" id="auctionRows"></div>
     </section>
 
-    <section class="panel review-panel" aria-label="自选同步与复盘日志">
+    <section class="panel review-panel" aria-label="自选同步与复盘日志" data-collapse-id="review">
       <div class="panel-head">
         <div>
           <h2>自选同步 / 复盘日志</h2>
@@ -212,7 +222,7 @@
       </div>
     </section>
 
-    <section class="panel watch-panel" aria-label="自选列表">
+    <section class="panel watch-panel" aria-label="自选列表" data-collapse-id="watch">
       <div class="panel-head">
         <div>
           <h2>自选列表</h2>
@@ -279,6 +289,11 @@
             <option value="功率半导体">功率半导体</option>
             <option value="电子特气">电子特气</option>
             <option value="光通信/海缆">光通信/海缆</option>
+            <option value="风电设备">风电设备</option>
+            <option value="有色金属">有色金属</option>
+            <option value="贵金属/黄金">贵金属/黄金</option>
+            <option value="稀土永磁">稀土永磁</option>
+            <option value="煤炭能源">煤炭能源</option>
             <option value="其他">其他</option>
           </select>
         </label>
