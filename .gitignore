@@ -1,0 +1,9 @@
+.agents/
+.codex/
+work/
+
+*.log
+*.tmp
+*.bak
+stock-watch-sync-*.json
+
