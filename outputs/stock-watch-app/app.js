@@ -3,7 +3,7 @@ const CONFIG_STORAGE_KEY = "stock-watch-config-v1";
 const AUCTION_STORAGE_KEY = "stock-watch-auction-v1";
 const IGNORED_RADAR_STORAGE_KEY = "stock-watch-ignored-radar-v1";
 const REVIEW_LOG_STORAGE_KEY = "stock-watch-review-log-v1";
-const APP_VERSION = "v1.3 交易复盘";
+const APP_VERSION = "v1.4 中军龙头";
 const JSONP_TIMEOUT = 9000;
 const RADAR_PAGE_SIZE = 80;
 const TECH_REFRESH_MS = 60000;
@@ -136,6 +136,7 @@ const commonStocks = [
   { code: "000725", name: "京东方A", theme: "面板/玻璃基板", note: "面板 / 玻璃基板", aliases: ["京东方", "BOE", "京东方A"] },
   { code: "000938", name: "紫光股份", theme: "AI算力/服务器", note: "服务器 / 网络设备", aliases: ["紫光"] },
   { code: "000977", name: "浪潮信息", theme: "AI算力/服务器", note: "AI服务器", aliases: ["浪潮"] },
+  { code: "000988", name: "华工科技", theme: "光模块/CPO", note: "光模块 / 激光设备", aliases: ["华工"] },
   { code: "002130", name: "沃尔核材", theme: "光通信/海缆", note: "高速铜缆 / 通信材料", aliases: ["沃尔"] },
   { code: "002156", name: "通富微电", theme: "先进封装", note: "封测 / 先进封装", aliases: ["通富"] },
   { code: "002185", name: "华天科技", theme: "先进封装", note: "封测 / 先进封装", aliases: ["华天"] },
@@ -180,6 +181,63 @@ const commonStocks = [
   { code: "605111", name: "新洁能", theme: "功率半导体", note: "功率器件", aliases: ["新洁能"] },
   { code: "605358", name: "立昂微", theme: "半导体材料", note: "硅片 / 功率半导体", aliases: ["立昂", "立微昂"] }
 ];
+
+const themeCoreMap = {
+  "AI算力/服务器": [
+    { code: "601138", name: "工业富联", role: "中军/龙头", type: "both", reason: "AI服务器整柜，容量和趋势代表板块持续性" },
+    { code: "000977", name: "浪潮信息", role: "中军", type: "middle", reason: "服务器核心容量票，观察机构承接" },
+    { code: "603019", name: "中科曙光", role: "核心", type: "core", reason: "算力基础设施核心观察" },
+    { code: "002463", name: "沪电股份", role: "分支龙头", type: "leader", reason: "AI PCB 分支弹性核心" }
+  ],
+  "光模块/CPO": [
+    { code: "002281", name: "光迅科技", role: "中军/龙头", type: "both", reason: "非创业板光器件/光模块核心" },
+    { code: "603083", name: "剑桥科技", role: "弹性龙头", type: "leader", reason: "光模块弹性强，适合观察强弱切换" },
+    { code: "000988", name: "华工科技", role: "核心", type: "core", reason: "光通信与激光设备双属性" }
+  ],
+  "HBM/存储": [
+    { code: "603986", name: "兆易创新", role: "中军", type: "middle", reason: "存储芯片容量核心，观察周期和国产替代" },
+    { code: "000021", name: "深科技", role: "核心", type: "core", reason: "存储封测和先进封装映射" },
+    { code: "600667", name: "太极实业", role: "弹性龙头", type: "leader", reason: "封测和存储扩产分支弹性" }
+  ],
+  "半导体设备": [
+    { code: "002371", name: "北方华创", role: "中军/龙头", type: "both", reason: "主板设备总龙头，决定设备线持续性" },
+    { code: "603690", name: "至纯科技", role: "弹性龙头", type: "leader", reason: "清洗设备和高纯工艺系统" },
+    { code: "600641", name: "万业企业", role: "分支核心", type: "core", reason: "离子注入设备分支观察" }
+  ],
+  "半导体材料": [
+    { code: "002409", name: "雅克科技", role: "中军", type: "middle", reason: "半导体材料平台型容量票" },
+    { code: "605358", name: "立昂微", role: "龙头", type: "leader", reason: "硅片和功率半导体弹性核心" },
+    { code: "600378", name: "昊华科技", role: "分支核心", type: "core", reason: "电子特气和六氟化钨分支核心" }
+  ],
+  "先进封装": [
+    { code: "600584", name: "长电科技", role: "中军", type: "middle", reason: "封测容量核心，观察先进封装持续性" },
+    { code: "002156", name: "通富微电", role: "龙头", type: "leader", reason: "先进封装弹性核心" },
+    { code: "002185", name: "华天科技", role: "核心", type: "core", reason: "封测分支跟踪" },
+    { code: "002436", name: "兴森科技", role: "分支核心", type: "core", reason: "IC载板和封装基板观察" }
+  ],
+  "电子特气": [
+    { code: "600378", name: "昊华科技", role: "中军/分支龙头", type: "both", reason: "电子特气和六氟化钨稀缺性核心" },
+    { code: "002409", name: "雅克科技", role: "中军", type: "middle", reason: "电子材料和特气平台型核心" },
+    { code: "002549", name: "凯美特气", role: "弹性龙头", type: "leader", reason: "稀有气体分支弹性观察" }
+  ],
+  "面板/玻璃基板": [
+    { code: "000725", name: "京东方A", role: "中军", type: "middle", reason: "面板容量核心，决定显示线持续性" },
+    { code: "000100", name: "TCL科技", role: "龙头", type: "leader", reason: "面板弹性和效率核心" },
+    { code: "600707", name: "彩虹股份", role: "分支核心", type: "core", reason: "玻璃基板分支弹性观察" }
+  ],
+  "功率半导体": [
+    { code: "600703", name: "三安光电", role: "中军", type: "middle", reason: "化合物半导体和功率方向容量核心" },
+    { code: "603290", name: "斯达半导", role: "龙头", type: "leader", reason: "IGBT 功率半导体核心" },
+    { code: "600460", name: "士兰微", role: "核心", type: "core", reason: "IDM 和功率器件观察" },
+    { code: "605111", name: "新洁能", role: "弹性核心", type: "core", reason: "功率器件弹性观察" }
+  ],
+  "光通信/海缆": [
+    { code: "600522", name: "中天科技", role: "中军", type: "middle", reason: "海缆和光通信容量核心" },
+    { code: "600487", name: "亨通光电", role: "龙头", type: "leader", reason: "光通信和海缆核心弹性" },
+    { code: "601869", name: "长飞光纤", role: "分支核心", type: "core", reason: "光纤光缆核心观察" },
+    { code: "600498", name: "烽火通信", role: "核心", type: "core", reason: "通信设备分支观察" }
+  ]
+};
 
 let stocks = loadStocks();
 let quotes = {};
@@ -232,6 +290,8 @@ const goldPulse = document.getElementById("goldPulse");
 const goldRefreshBtn = document.getElementById("goldRefreshBtn");
 const themePulse = document.getElementById("themePulse");
 const themeRows = document.getElementById("themeRows");
+const corePulse = document.getElementById("corePulse");
+const coreRows = document.getElementById("coreRows");
 const radarRows = document.getElementById("radarRows");
 const radarPulse = document.getElementById("radarPulse");
 const radarRefreshBtn = document.getElementById("radarRefreshBtn");
@@ -736,6 +796,7 @@ function render() {
   renderMarket();
   renderGold();
   renderThemes();
+  renderCoreRoles();
   renderRadar();
   renderThemeRadar();
   renderAuction();
@@ -759,6 +820,9 @@ function renderRow(stock) {
   const buyGate = getBuyGate(stock, quote, technical, analysis);
   const dataQuality = analysis.dataQuality;
   const tradeBrief = getTradeBrief(stock, quote, technical, analysis, buyGate);
+  const coreRole = getStockCoreRole(stock.code, stock.theme);
+  const leadingTheme = getLeadingThemes(1)[0];
+  const isLeadingCore = coreRole && leadingTheme?.theme === coreRole.theme && leadingTheme?.rankLabel !== "静态核心";
 
   return `
     <article class="watch-card">
@@ -776,6 +840,8 @@ function renderRow(stock) {
 
         <div class="watch-meta-row">
           <span class="badge info">${escapeHtml(stock.theme)}</span>
+          ${coreRole ? `<span class="core-badge ${coreRole.type}">${escapeHtml(coreRole.role)}</span>` : ""}
+          ${isLeadingCore ? `<span class="core-badge leading">领涨主线</span>` : ""}
           <span>${analysis.themeDetail}</span>
           ${stock.note ? `<span class="watch-note">${escapeHtml(stock.note)}</span>` : ""}
         </div>
@@ -1364,6 +1430,7 @@ async function refreshThemes(force = false) {
   themeState = nextState;
   themeFetchedAt = Date.now();
   renderThemes();
+  renderCoreRoles();
 }
 
 function renderThemes() {
@@ -1392,6 +1459,115 @@ function renderThemes() {
       </div>
     `;
   }).join("");
+}
+
+function renderCoreRoles() {
+  if (!coreRows) return;
+  const themes = getLeadingThemes(4);
+  if (!themes.length) {
+    coreRows.innerHTML = `<div class="empty">等待主线刷新。中军看持续性，龙头看弹性，后排只做跟踪。</div>`;
+    return;
+  }
+
+  const updated = themeFetchedAt ? new Date(themeFetchedAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }) : "--";
+  const top = themes[0];
+  corePulse.textContent = `${top.rankLabel}：${top.theme} · ${top.strength}/5 · ${updated}`;
+
+  coreRows.innerHTML = themes.map((themeItem) => {
+    const cls = themeItem.rankLabel === "当前领涨" ? "hot" : themeItem.rankLabel === "强观察" ? "watch" : "wait";
+    const candidates = getThemeCoreCandidates(themeItem.theme).slice(0, 4);
+    return `
+      <article class="core-card ${cls}">
+        <div class="core-card-head">
+          <div>
+            <strong>${escapeHtml(themeItem.theme)}</strong>
+            <span>${themeItem.rankLabel} · 强度 ${themeItem.strength}/5 · 板块 ${signed(themeItem.change)}%</span>
+          </div>
+          <span class="core-rank ${cls}">${themeItem.radarLevel || themeItem.source}</span>
+        </div>
+        <div class="core-stock-list">
+          ${candidates.map((item) => renderCoreStock(item, themeItem.theme)).join("")}
+        </div>
+        <p>${escapeHtml(getCoreThemeAdvice(themeItem))}</p>
+      </article>
+    `;
+  }).join("");
+}
+
+function renderCoreStock(item, theme) {
+  const quote = quotes[item.code];
+  const changeClass = quote ? getChangeClass(quote.changePercent) : "flat";
+  const inWatch = stocks.some((stock) => stock.code === item.code);
+  return `
+    <div class="core-stock ${item.type}">
+      <div>
+        <span class="core-badge ${item.type}">${escapeHtml(item.role)}</span>
+        ${inWatch ? `<span class="core-badge in-watch">自选</span>` : ""}
+      </div>
+      <strong>${escapeHtml(item.name)}</strong>
+      <span>${item.code} · ${escapeHtml(theme)}</span>
+      <small>${quote?.price ? formatMoney(quote.price) : "--"} <b class="${changeClass}">${quote ? `${signed(quote.changePercent)}%` : "--"}</b></small>
+      <p>${escapeHtml(item.reason)}</p>
+    </div>
+  `;
+}
+
+function getLeadingThemes(limit = 4) {
+  const radarGroups = buildThemeRadarGroups();
+  const radarMap = new Map(radarGroups.map((group) => [group.name, group]));
+  return Object.keys(themeCoreMap)
+    .map((theme) => {
+      const state = themeState[theme] || { strength: themeStrength[theme] || 2, change: 0, board: "等待刷新", source: "默认" };
+      const radar = radarMap.get(theme);
+      const radarBoost = radar
+        ? radar.count * 8 + Math.max(radar.mainInflowYi, 0) * 2 + Math.max(radar.avgChange, 0) * 1.5 + (radar.level === "强共振" ? 14 : 0)
+        : 0;
+      const dynamicScore = state.strength * 20 + Math.max(state.change || 0, 0) * 2 + radarBoost;
+      const hasDynamicSignal = state.source === "动态" || Boolean(radar);
+      let rankLabel = "静态核心";
+      if (hasDynamicSignal && dynamicScore >= 92) rankLabel = "当前领涨";
+      else if (hasDynamicSignal && dynamicScore >= 74) rankLabel = "强观察";
+      else if (hasDynamicSignal) rankLabel = "观察";
+      return {
+        theme,
+        strength: state.strength,
+        change: state.change || 0,
+        source: state.source || "默认",
+        board: state.board || "等待刷新",
+        radarLevel: radar?.level || "",
+        radarCount: radar?.count || 0,
+        mainInflowYi: radar?.mainInflowYi || 0,
+        score: dynamicScore,
+        rankLabel
+      };
+    })
+    .sort((a, b) => b.score - a.score || b.strength - a.strength || b.change - a.change)
+    .slice(0, limit);
+}
+
+function getThemeCoreCandidates(theme) {
+  return (themeCoreMap[theme] || []).filter((item) => isMainBoardTradable(item.code));
+}
+
+function getStockCoreRole(code, theme = "") {
+  const exactTheme = getThemeCoreCandidates(theme).find((item) => item.code === code);
+  if (exactTheme) return { ...exactTheme, theme };
+
+  for (const [coreTheme, items] of Object.entries(themeCoreMap)) {
+    const matched = items.find((item) => item.code === code && isMainBoardTradable(item.code));
+    if (matched) return { ...matched, theme: coreTheme };
+  }
+  return null;
+}
+
+function getCoreThemeAdvice(themeItem) {
+  if (themeItem.rankLabel === "当前领涨") {
+    return "先看中军是否放量站稳，再看龙头弹性；中军破位则降级，不追后排。";
+  }
+  if (themeItem.rankLabel === "强观察") {
+    return "已接近领涨状态，等中军确认突破或缩量回踩不破。";
+  }
+  return "只维护核心观察名单，等资金和板块共振再提高优先级。";
 }
 
 function fetchIndexQuote(index) {
@@ -1768,6 +1944,7 @@ async function refreshRadar(force = false) {
     : `暂无主板大市值异动 · 忽略 ${ignoredRadarCodes.size} 只 · 深度 ${getRadarDepthText()} · ${time}`;
   renderRadar();
   renderThemeRadar();
+  renderCoreRoles();
   updateMetrics();
 }
 

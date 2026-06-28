@@ -220,6 +220,7 @@ h2 {
 }
 
 .gold-panel,
+.core-panel,
 .radar-panel,
 .theme-radar-panel {
   margin-bottom: 18px;
@@ -460,6 +461,142 @@ button:disabled {
 .settings-actions {
   grid-column: 1 / -1;
   justify-content: flex-end;
+}
+
+.core-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px;
+}
+
+.core-card {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.core-card.hot {
+  border-color: #ffc9c9;
+  background: var(--red-soft);
+}
+
+.core-card.watch {
+  border-color: #b9ccff;
+  background: var(--blue-soft);
+}
+
+.core-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.core-card-head strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 16px;
+}
+
+.core-card-head span,
+.core-card p,
+.core-stock span,
+.core-stock small,
+.core-stock p {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.core-rank,
+.core-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.core-rank.hot,
+.core-badge.both,
+.core-badge.leading {
+  color: #fff;
+  background: var(--red);
+}
+
+.core-rank.watch,
+.core-badge.leader {
+  color: var(--blue);
+  background: var(--blue-soft);
+}
+
+.core-rank.wait,
+.core-badge.middle {
+  color: var(--amber);
+  background: var(--amber-soft);
+}
+
+.core-badge.core,
+.core-badge.in-watch {
+  color: var(--muted);
+  background: #eef1f6;
+}
+
+.core-stock-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.core-stock {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.core-stock.both {
+  border-color: #ffc9c9;
+}
+
+.core-stock.leader {
+  border-color: #b9ccff;
+}
+
+.core-stock.middle {
+  border-color: #ffd98f;
+}
+
+.core-stock div {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.core-stock strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+.core-stock small {
+  display: block;
+  margin-top: 6px;
+}
+
+.core-stock p {
+  margin-top: 7px;
+  line-height: 1.45;
 }
 
 .radar-list {
@@ -1540,7 +1677,9 @@ select:focus {
 
   .radar-list,
   .theme-radar-list,
-  .auction-list {
+  .auction-list,
+  .core-list,
+  .core-stock-list {
     grid-template-columns: 1fr;
   }
 
