@@ -3,7 +3,7 @@ const CONFIG_STORAGE_KEY = "stock-watch-config-v1";
 const AUCTION_STORAGE_KEY = "stock-watch-auction-v1";
 const IGNORED_RADAR_STORAGE_KEY = "stock-watch-ignored-radar-v1";
 const REVIEW_LOG_STORAGE_KEY = "stock-watch-review-log-v1";
-const APP_VERSION = "v1.4 中军龙头";
+const APP_VERSION = "v1.4.1 中军龙头";
 const JSONP_TIMEOUT = 9000;
 const RADAR_PAGE_SIZE = 80;
 const TECH_REFRESH_MS = 60000;
@@ -1463,7 +1463,7 @@ function renderThemes() {
 
 function renderCoreRoles() {
   if (!coreRows) return;
-  const themes = getLeadingThemes(4);
+  const themes = getLeadingThemes(8);
   if (!themes.length) {
     coreRows.innerHTML = `<div class="empty">等待主线刷新。中军看持续性，龙头看弹性，后排只做跟踪。</div>`;
     return;
