@@ -90,13 +90,25 @@ window.document.querySelector("#addSellBtn").click();
 const sameDaySellBlocked = window.document.querySelector("#sellPulse")?.textContent.includes("T+1可卖上限 0 股")
   && !window.localStorage.getItem("stock-review-sells-v1");
 
+window.document.querySelector("#tradeDateInput").value = today;
+window.document.querySelector("#tradePriceInput").value = "20";
+window.document.querySelector("#tradeSharesInput").value = "100";
+window.document.querySelector("#addTradeBtn").click();
+const feeAwareCostRendered = window.document.querySelector("#costSummary")?.textContent.includes("费用后均价")
+  && window.document.querySelector("#costSummary")?.textContent.includes("净保本价");
+window.document.querySelector("#commissionRateInput").value = "0.1";
+window.document.querySelector("#commissionRateInput").dispatchEvent(new window.Event("change", { bubbles: true }));
+const feeSettingsSaved = JSON.parse(window.localStorage.getItem("stock-review-fees-v1") || "{}").commissionRate === 0.001;
+
 const bodyText = window.document.body.textContent || "";
 const checks = [
-  ["version", window.document.querySelector("#versionPill")?.textContent === "v0.4.2 交易日期校验"],
+  ["version", window.document.querySelector("#versionPill")?.textContent === "v0.6.0 成交密集区"],
   ["embedded support", appSource.includes("EMBEDDED_MODE") && appSource.includes("mergeWatchStocks") && appSource.includes("WATCH_STOCKS_KEY")],
   ["stock list", window.document.querySelectorAll(".stock-card").length > 0],
   ["stock delete", window.document.querySelector("[data-delete-stock]") !== null && appSource.includes("deleteReviewStock") && appSource.includes("HIDDEN_STOCKS_KEY")],
   ["chart canvas", window.document.querySelector("#klineCanvas") !== null],
+  ["estimated cost area legend", window.document.querySelector("#costAreaSummary") !== null && bodyText.includes("日K估算")],
+  ["cost profile uses completed daily bars", appSource.includes("item.date < getTodayKey()") && appSource.includes("calculateVolumeProfile(completedItems)")],
   ["ma strip", window.document.querySelector("#maStrip") !== null && bodyText.includes("MA5")],
   ["add stock input", window.document.querySelector("#stockInput") !== null],
   ["notes", window.document.querySelector("#noteInput") !== null && window.document.querySelector("#noteList") !== null],
@@ -105,6 +117,9 @@ const checks = [
   ["sell marker form", window.document.querySelector("#sellDateInput") !== null && window.document.querySelector("#sellPriceInput") !== null && window.document.querySelector("#sellReasonInput") !== null && appSource.includes("addSellMarker")],
   ["excel review sheet", window.document.querySelector("#reviewSheetTable") !== null && window.document.querySelector("#exportSheetBtn") !== null && appSource.includes("REVIEW_SHEET_KEY") && bodyText.includes("Excel式复盘表")],
   ["cost summary", window.document.querySelector("#costSummary") !== null && appSource.includes("getCostSummary") && appSource.includes("已实现盈亏") && appSource.includes("总盈亏")],
+  ["editable fee assumptions", window.document.querySelector("#feeSettingsPanel") !== null && window.document.querySelector("#commissionRateInput") !== null && window.document.querySelector("#slippageRateInput") !== null && bodyText.includes("估算费率")],
+  ["net liquidation and break-even", appSource.includes("calculateNetPosition") && tradeRulesSource.includes("netLiquidationValue") && appSource.includes("保本价")],
+  ["fee-aware cost recalculates and persists", feeAwareCostRendered && feeSettingsSaved],
   ["execution score", window.document.querySelector("#executionScoreRows") !== null && appSource.includes("getExecutionScore") && bodyText.includes("执行评分")],
   ["watch holding sync", appSource.includes("syncTradeToWatchStock") && appSource.includes("stock-review-holding-sync") && appSource.includes("WATCH_STOCKS_KEY")],
   ["T+1 sell gate", html.includes("../stock-watch-app/trade-rules.js") && appSource.includes("getWatchSellAvailability") && appSource.includes("T+1可卖上限") && appSource.includes("consumeSellFromLots") && sameDaySellBlocked],
@@ -114,7 +129,7 @@ const checks = [
   ["kline fetch", appSource.includes("fetchKline") && appSource.includes("push2his.eastmoney.com")],
   ["kline fallback", appSource.includes("fetchTencentKline") && appSource.includes("web.ifzq.gtimg.cn") && appSource.includes("腾讯备用")],
   ["moving averages", appSource.includes("movingAverage") && appSource.includes("ma5") && appSource.includes("ma10") && appSource.includes("ma20")],
-  ["canvas drawing", appSource.includes("drawKlineChart") && appSource.includes("drawMaLine")],
+  ["canvas drawing", appSource.includes("drawKlineChart") && appSource.includes("drawMaLine") && appSource.includes("drawCostArea")],
   ["trade marker drawing", appSource.includes("TRADES_KEY") && appSource.includes("drawTradeMarkers") && appSource.includes("addTradeMarker") && appSource.includes("getVisibleTradeMarkers")]
 ];
 

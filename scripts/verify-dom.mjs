@@ -44,7 +44,7 @@ await new Promise((resolve) => window.setTimeout(resolve, 0));
 
 const bodyText = window.document.body.textContent || "";
 const checks = [
-  ["version", window.document.querySelector("#versionPill")?.textContent === "v1.8.1 数据/样本加固"],
+  ["version", window.document.querySelector("#versionPill")?.textContent === "v1.9.0 净值/前瞻统一"],
   ["trade rules loaded before app", html.indexOf("trade-rules.js") < html.indexOf("app.js") && Boolean(window.StockTradeRules)],
   ["app navigation", window.document.querySelector("#appNav") !== null && window.document.querySelectorAll("[data-page-target]").length >= 5 && appSource.includes("setupAppNavigation")],
   ["optional mode switch", !window.document.querySelector("#modeSwitch") || (appSource.includes("setActiveMode") && window.document.body.dataset.workMode)],
@@ -54,6 +54,7 @@ const checks = [
   ["embedded kline review", window.document.querySelector("#reviewFrame")?.getAttribute("src")?.includes("embed=1") && bodyText.includes("复盘K线")],
   ["watch cards", window.document.querySelectorAll(".watch-card").length > 0],
   ["watch details collapsed", window.document.querySelectorAll(".watch-detail").length > 0 && appSource.includes("watch-quick-row")],
+  ["compact watch summary", [...window.document.querySelectorAll(".watch-quick-row")].every((row) => row.children.length <= 4) && window.document.querySelectorAll(".structure-stop-plan").length > 0 && window.document.querySelectorAll(".sell-grade-panel").length > 0],
   ["stock positions", window.document.querySelectorAll(".stock-position").length > 0],
   ["trade plan checks", window.document.querySelectorAll(".trade-plan-check").length > 0],
   ["pre buy check", window.document.querySelectorAll(".pre-buy-check").length > 0 && bodyText.includes("买前检查") && appSource.includes("getPreBuyCheck")],
@@ -113,6 +114,9 @@ const checks = [
   ["missing market data waits", tradeRulesSource.includes("getBenchmarkAverageChange") && appSource.includes("indexes.length >= 2 && avgChange !== null") && appSource.includes("marketState?.benchmarkDataAvailable ? marketState.avgChange : null")],
   ["stale kline volume waits", appSource.includes('return { period: "stale" }') && appSource.includes("barCurrent: technical.volumeRatioPeriod !== \"stale\"") && tradeRulesSource.includes("K线日期过期")],
   ["signal sample audit", window.document.querySelector("#signalAuditRows") !== null && window.document.querySelector("#signalAuditBreakdown") !== null && appSource.includes("captureConfirmedSignalSnapshot") && appSource.includes("appendSignalOutcome") && appSource.includes("marketRegime") && bodyText.includes("确认买点信号") && bodyText.includes("不代表仓位许可或实际成交")],
+  ["forward signal statistics", window.document.querySelector("#signalAuditForwardSummary") !== null && appSource.includes("getForwardSignalMetrics") && appSource.includes("summarizeForwardMetrics") && bodyText.includes("T+1/3/5/10")],
+  ["canonical decision status", appSource.includes("resolveCanonicalDecision") && appSource.includes("canonicalDecision") && appSource.includes("stock-watch-context-sync")],
+  ["decision readiness gate", tradeRulesSource.includes("evaluateDecisionDataGate") && appSource.includes("dataGate.state") && appSource.includes("dataGate.reason")],
   ["signal snapshots preserve evidence", appSource.includes("marketAverageChange") && appSource.includes("indexMa10") && appSource.includes("volumePeriod")],
   ["filtered stocks still capture signals", appSource.indexOf("const analyzed = stocks") < appSource.indexOf("captureConfirmedSignalSnapshot(normalized") && appSource.indexOf("captureConfirmedSignalSnapshot(normalized") < appSource.indexOf(".filter((item) => watchFilterMatches(item))")],
   ["failed review sells stay unbaselined", appSource.includes("reviewFailedSellIds") && appSource.includes("excludeIds: failedReviewSellIds") && appSource.includes("getEligibleTransactionIds(rows")],

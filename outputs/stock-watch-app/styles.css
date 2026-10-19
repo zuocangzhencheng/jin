@@ -2154,6 +2154,16 @@ button:disabled {
   line-height: 1.4;
 }
 
+.signal-forward-summary {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #f4f7fb;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
 .signal-audit-row {
   display: flex;
   align-items: center;

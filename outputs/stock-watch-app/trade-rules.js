@@ -1,4 +1,298 @@
 (function attachStockTradeRules(root) {
+  const DEFAULT_FEE_SETTINGS = Object.freeze({
+    commissionRate: 0.00025,
+    commissionMin: 5,
+    stampDutyRate: 0.0005,
+    transferFeeRate: 0.00001,
+    slippageRate: 0
+  });
+
+  function roundMoney(value) {
+    return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+  }
+
+  function normalizeFeeSettings(settings = {}) {
+    const limits = { commissionRate: 0.01, commissionMin: 100, stampDutyRate: 0.01, transferFeeRate: 0.01, slippageRate: 0.01 };
+    const next = {};
+    Object.keys(DEFAULT_FEE_SETTINGS).forEach((key) => {
+      const value = Number(settings[key]);
+      next[key] = Number.isFinite(value) && value >= 0 ? Math.min(value, limits[key]) : DEFAULT_FEE_SETTINGS[key];
+    });
+    return next;
+  }
+
+  function estimateTradeFees(price, shares, side = "buy", settings = {}, { includeSlippage = true } = {}) {
+    const normalized = normalizeFeeSettings(settings);
+    const amount = Math.max(0, Number(price) || 0) * Math.max(0, Number(shares) || 0);
+    if (!amount) return { amount: 0, commission: 0, stampDuty: 0, transferFee: 0, slippage: 0, total: 0 };
+    const sell = side === "sell";
+    const commission = Math.max(amount * normalized.commissionRate, normalized.commissionMin);
+    const stampDuty = sell ? amount * normalized.stampDutyRate : 0;
+    const transferFee = amount * normalized.transferFeeRate;
+    const slippage = includeSlippage ? amount * normalized.slippageRate : 0;
+    return {
+      amount: roundMoney(amount),
+      commission: roundMoney(commission),
+      stampDuty: roundMoney(stampDuty),
+      transferFee: roundMoney(transferFee),
+      slippage: roundMoney(slippage),
+      total: roundMoney(commission + stampDuty + transferFee + slippage)
+    };
+  }
+
+  function calculateNetPosition({ buys = [], sells = [], currentPrice = 0, feeSettings = {} } = {}) {
+    const validBuys = (Array.isArray(buys) ? buys : []).filter((item) => Number(item?.price) > 0 && Number(item?.shares) > 0);
+    const validSells = (Array.isArray(sells) ? sells : []).filter((item) => Number(item?.price) > 0 && Number(item?.shares) > 0);
+    const totalShares = validBuys.reduce((sum, item) => sum + Number(item.shares), 0);
+    const grossBuyCost = validBuys.reduce((sum, item) => sum + Number(item.price) * Number(item.shares), 0);
+    const buyFees = validBuys.reduce((sum, item) => sum + estimateTradeFees(item.price, item.shares, "buy", feeSettings, { includeSlippage: false }).total, 0);
+    const acquisitionCost = roundMoney(grossBuyCost + buyFees);
+    const events = [
+      ...validBuys.map((item) => ({ ...item, kind: "buy" })),
+      ...validSells.map((item) => ({ ...item, kind: "sell" }))
+    ].sort((a, b) => {
+      const dateDiff = String(a.date || "").localeCompare(String(b.date || ""));
+      if (dateDiff) return dateDiff;
+      if (a.date && b.date && a.kind !== b.kind) return a.kind === "sell" ? -1 : 1;
+      const timeDiff = String(a.at || "").localeCompare(String(b.at || ""));
+      return timeDiff || (a.kind === b.kind ? 0 : a.kind === "buy" ? -1 : 1);
+    });
+    let remainingShares = 0;
+    let remainingCost = 0;
+    let realizedPnl = 0;
+    let soldShares = 0;
+    let grossSoldAmount = 0;
+    let sellFees = 0;
+    let unmatchedSoldShares = 0;
+    const sellResults = [];
+
+    events.forEach((item) => {
+      const shares = Number(item.shares);
+      if (item.kind === "buy") {
+        remainingShares += shares;
+        remainingCost += Number(item.price) * shares + estimateTradeFees(item.price, shares, "buy", feeSettings, { includeSlippage: false }).total;
+        return;
+      }
+      const matchedShares = Math.min(shares, remainingShares);
+      const fees = estimateTradeFees(item.price, shares, "sell", feeSettings, { includeSlippage: false }).total;
+      const matchedFees = shares ? fees * matchedShares / shares : 0;
+      const matchedProceeds = Number(item.price) * matchedShares - matchedFees;
+      const matchedCost = remainingShares ? remainingCost * matchedShares / remainingShares : 0;
+      const sellPnl = matchedProceeds - matchedCost;
+      realizedPnl += sellPnl;
+      sellResults.push({
+        id: String(item.id || ""),
+        date: String(item.date || ""),
+        shares,
+        matchedShares,
+        grossAmount: roundMoney(Number(item.price) * shares),
+        fees: roundMoney(fees),
+        realizedPnl: roundMoney(sellPnl),
+        pnlPct: matchedCost ? roundMoney(sellPnl / matchedCost * 100) : 0
+      });
+      remainingCost -= matchedCost;
+      sellFees += fees;
+      grossSoldAmount += Number(item.price) * shares;
+      soldShares += matchedShares;
+      remainingShares -= matchedShares;
+      unmatchedSoldShares += shares - matchedShares;
+    });
+
+    const averageNetCost = remainingShares ? remainingCost / remainingShares : totalShares ? acquisitionCost / totalShares : 0;
+    const price = Number(currentPrice) > 0 ? Number(currentPrice) : 0;
+    const currentValue = price * remainingShares;
+    const estimatedExitFees = price && remainingShares ? estimateTradeFees(price, remainingShares, "sell", feeSettings).total : 0;
+    const netLiquidationValue = roundMoney(currentValue - estimatedExitFees);
+    const unrealizedPnl = price ? roundMoney(netLiquidationValue - remainingCost) : 0;
+    const netPnl = roundMoney(realizedPnl + unrealizedPnl);
+    const pnlPct = acquisitionCost ? netPnl / acquisitionCost * 100 : 0;
+    let breakEvenPrice = null;
+    const breakEvenCovered = Boolean(remainingShares && realizedPnl >= remainingCost);
+    const breakEvenTarget = remainingCost - realizedPnl;
+    if (remainingShares && breakEvenTarget > 0) {
+      let low = 0;
+      let high = Math.max(breakEvenTarget / remainingShares * 2, price * 2, 1);
+      for (let index = 0; index < 60; index += 1) {
+        const middle = (low + high) / 2;
+        const netProceeds = middle * remainingShares - estimateTradeFees(middle, remainingShares, "sell", feeSettings).total;
+        if (netProceeds >= breakEvenTarget) high = middle;
+        else low = middle;
+      }
+      breakEvenPrice = Math.round(high * 1000) / 1000;
+    }
+
+    return {
+      totalShares,
+      grossBuyCost: roundMoney(grossBuyCost),
+      buyFees: roundMoney(buyFees),
+      acquisitionCost,
+      averageNetCost: totalShares ? roundMoney(averageNetCost * 1000) / 1000 : 0,
+      soldShares,
+      grossSoldAmount: roundMoney(grossSoldAmount),
+      sellFees: roundMoney(sellFees),
+      realizedPnl: roundMoney(realizedPnl),
+      remainingShares,
+      remainingCost: roundMoney(remainingCost),
+      currentPrice: price,
+      currentValue: roundMoney(currentValue),
+      estimatedExitFees,
+      netLiquidationValue,
+      unrealizedPnl,
+      netPnl,
+      pnlPct: roundMoney(pnlPct),
+      breakEvenPrice,
+      breakEvenCovered,
+      unmatchedSoldShares,
+      sellResults
+    };
+  }
+
+  function getForwardSignalMetrics(snapshot, bars, { horizons = [1, 3, 5, 10], asOfDate = null } = {}) {
+    const sessionDate = String(snapshot?.sessionDate || "").slice(0, 10);
+    const entry = Number(snapshot?.entryReference);
+    const invalidationLine = Number(snapshot?.invalidationLine);
+    const orderedBars = (Array.isArray(bars) ? bars : [])
+      .filter((bar) => {
+        const date = String(bar?.date || "").slice(0, 10);
+        return /^\d{4}-\d{2}-\d{2}$/.test(date) && (!asOfDate || date <= asOfDate) && bar.complete !== false
+          && [bar.high, bar.low, bar.close].every((value) => Number.isFinite(Number(value)));
+      })
+      .slice()
+      .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    const hasAnchor = orderedBars.some((bar) => String(bar.date).slice(0, 10) === sessionDate);
+    const forwardBars = orderedBars.filter((bar) => String(bar.date).slice(0, 10) > sessionDate);
+
+    return horizons.map((horizon) => {
+      const count = Math.max(1, Math.floor(Number(horizon) || 1));
+      const complete = hasAnchor && forwardBars.length >= count && entry > 0;
+      const windowBars = complete ? forwardBars.slice(0, count) : [];
+      if (!complete) return { horizon: count, complete: false, observedSessions: Math.min(forwardBars.length, count), closeReturnPct: null, maxFavorablePct: null, maxAdversePct: null, invalidationHit: null, throughDate: forwardBars.at(-1)?.date || null };
+      const highs = windowBars.map((bar) => Number(bar.high));
+      const lows = windowBars.map((bar) => Number(bar.low));
+      const close = Number(windowBars.at(-1).close);
+      return {
+        horizon: count,
+        complete: true,
+        observedSessions: count,
+        closeReturnPct: roundMoney((close / entry - 1) * 100),
+        maxFavorablePct: roundMoney((Math.max(...highs) / entry - 1) * 100),
+        maxAdversePct: roundMoney((Math.min(...lows) / entry - 1) * 100),
+        invalidationHit: invalidationLine > 0 ? lows.some((low) => low <= invalidationLine) : null,
+        throughDate: windowBars.at(-1).date
+      };
+    });
+  }
+
+  function summarizeForwardMetrics(records, horizons = [1, 3, 5, 10]) {
+    const rows = (Array.isArray(records) ? records : []).flat();
+    return horizons.map((horizon) => {
+      const metrics = rows.map((record) => Array.isArray(record) ? record.find((item) => item.horizon === horizon) : record?.horizon === horizon ? record : null)
+        .filter((item) => item?.complete);
+      const average = (key) => metrics.length ? roundMoney(metrics.reduce((sum, item) => sum + Number(item[key] || 0), 0) / metrics.length) : null;
+      return {
+        horizon,
+        sampleCount: metrics.length,
+        positiveRatePct: metrics.length ? roundMoney(metrics.filter((item) => item.closeReturnPct > 0).length / metrics.length * 100) : null,
+        averageCloseReturnPct: average("closeReturnPct"),
+        averageMaxFavorablePct: average("maxFavorablePct"),
+        averageMaxAdversePct: average("maxAdversePct"),
+        invalidationHits: metrics.filter((item) => item.invalidationHit === true).length
+      };
+    });
+  }
+
+  function calculateVolumeProfile(bars, { valueAreaPercent = 0.7, priceStep = null } = {}) {
+    const validBars = (Array.isArray(bars) ? bars : []).map((bar) => ({
+      low: Number(bar?.low),
+      high: Number(bar?.high),
+      volume: Number(bar?.volume)
+    })).filter((bar) => [bar.low, bar.high, bar.volume].every(Number.isFinite)
+      && bar.low > 0 && bar.high >= bar.low && bar.volume > 0);
+    if (!validBars.length) return null;
+
+    const middlePrices = validBars.map((bar) => (bar.low + bar.high) / 2).sort((a, b) => a - b);
+    const medianPrice = middlePrices[Math.floor(middlePrices.length / 2)];
+    const step = Math.max(0.01, Number(priceStep) > 0 ? Number(priceStep) : Math.round(medianPrice * 0.005 * 100) / 100);
+    const bins = new Map();
+    const addVolume = (index, volume) => bins.set(index, (bins.get(index) || 0) + volume);
+
+    validBars.forEach(({ low, high, volume }) => {
+      if (high === low) {
+        addVolume(Math.floor(low / step + 1e-9), volume);
+        return;
+      }
+      const firstIndex = Math.floor(low / step + 1e-9);
+      const lastIndex = Math.max(firstIndex, Math.ceil(high / step - 1e-9) - 1);
+      let distributed = 0;
+      const parts = [];
+      for (let index = firstIndex; index <= lastIndex; index += 1) {
+        const overlap = Math.max(0, Math.min(high, (index + 1) * step) - Math.max(low, index * step));
+        if (overlap > 0) parts.push([index, volume * overlap / (high - low)]);
+      }
+      parts.forEach(([, part]) => { distributed += part; });
+      if (parts.length) parts[parts.length - 1][1] += volume - distributed;
+      parts.forEach(([index, part]) => addVolume(index, part));
+    });
+
+    const indices = [...bins.keys()].sort((a, b) => a - b);
+    if (!indices.length) return null;
+    const minIndex = indices[0];
+    const maxIndex = indices[indices.length - 1];
+    const totalVolume = [...bins.values()].reduce((sum, volume) => sum + volume, 0);
+    const pocIndex = indices.reduce((best, index) => bins.get(index) > bins.get(best) ? index : best, indices[0]);
+    const targetPercent = Math.min(1, Math.max(0.01, Number(valueAreaPercent) || 0.7));
+    let lowerIndex = pocIndex;
+    let upperIndex = pocIndex;
+    let areaVolume = bins.get(pocIndex);
+    const targetVolume = totalVolume * targetPercent;
+    while (areaVolume + totalVolume * 1e-10 < targetVolume) {
+      const lowerVolume = lowerIndex > minIndex ? bins.get(lowerIndex - 1) || 0 : -1;
+      const upperVolume = upperIndex < maxIndex ? bins.get(upperIndex + 1) || 0 : -1;
+      if (lowerVolume < 0 && upperVolume < 0) break;
+      if (lowerVolume >= upperVolume) {
+        lowerIndex -= 1;
+        areaVolume += Math.max(0, lowerVolume);
+      } else {
+        upperIndex += 1;
+        areaVolume += Math.max(0, upperVolume);
+      }
+    }
+    const centerVolume = [...bins.entries()].reduce((sum, [index, volume]) => index >= lowerIndex && index <= upperIndex ? sum + volume : sum, 0);
+    const weightedCenter = [...bins.entries()].reduce((sum, [index, volume]) => index >= lowerIndex && index <= upperIndex
+      ? sum + (index + 0.5) * step * volume : sum, 0) / centerVolume;
+    const roundPrice = (price) => Math.round(price * 1000) / 1000;
+    return {
+      lower: roundPrice(lowerIndex * step),
+      upper: roundPrice((upperIndex + 1) * step),
+      poc: roundPrice((pocIndex + 0.5) * step),
+      volumeWeightedCenter: roundPrice(weightedCenter),
+      totalVolume,
+      areaVolume,
+      valueAreaPercent: targetPercent,
+      priceStep: step,
+      barCount: validBars.length
+    };
+  }
+
+  function evaluateDecisionDataGate({ ready, timestamps, now = Date.now(), maxSkewMs = 90000, maxAgeMs = 120000 } = {}) {
+    const coherent = Boolean(ready) && isSnapshotCoherent(timestamps, maxSkewMs, now, maxAgeMs);
+    return {
+      state: coherent ? "pass" : "wait",
+      coherent,
+      reason: coherent ? "数据齐全且时间对齐" : !ready ? "行情、K线或环境数据缺失/待核验" : "数据过期或刷新时间未对齐"
+    };
+  }
+
+  function resolveCanonicalDecision({ dataState, holding = false, sellAction = "hold", buyState = "wait" } = {}) {
+    if (dataState !== "pass") return { state: "wait", label: "数据待齐", reason: "数据闸门未通过" };
+    if (holding && ["clear", "reduce", "reduce-half", "wait-close"].includes(sellAction)) {
+      return { state: "sell", label: sellAction === "wait-close" ? "等收盘确认" : "卖出/减仓", reason: sellAction };
+    }
+    if (buyState === "confirmed") return { state: "confirmed", label: "确认买点", reason: "三闸门、六灯和结构确认" };
+    if (buyState === "candidate") return { state: "candidate", label: "盘中候选", reason: "等待收盘确认" };
+    return { state: holding ? "holding" : "observe", label: holding ? "持仓观察" : "观察等待", reason: "尚无完整买卖触发" };
+  }
+
   function isSnapshotCoherent(times, maxSkewMs = 60000, now = null, maxAgeMs = 120000) {
     if (!Array.isArray(times) || times.length < 3 || times.some((time) => !Number.isFinite(time) || time <= 0)) return false;
     const oldest = Math.min(...times);
@@ -47,6 +341,12 @@
     return changes.length ? changes.reduce((sum, value) => sum + value, 0) / changes.length : null;
   }
 
+  function getRefreshDelay(baseDelayMs, { tradingWindow = false, hidden = false, idleDelayMs = 300000 } = {}) {
+    const baseDelay = Number.isFinite(baseDelayMs) && baseDelayMs > 0 ? baseDelayMs : 60000;
+    const idleDelay = Number.isFinite(idleDelayMs) && idleDelayMs > 0 ? Math.max(baseDelay, idleDelayMs) : Math.max(baseDelay, 300000);
+    return hidden || !tradingWindow ? idleDelay : baseDelay;
+  }
+
   function isTransactionDateAllowed(dateKey, todayKey) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateKey || "")) || !/^\d{4}-\d{2}-\d{2}$/.test(String(todayKey || ""))) return false;
     const parsed = new Date(`${dateKey}T00:00:00Z`);
@@ -60,13 +360,29 @@
       .map((item) => String(item.id));
   }
 
-  function evaluatePositionPermission({ setupConfirmed, entryPrice, stopPrice, maxLoss, lotSize = 100 }) {
+  function evaluatePositionPermission({ setupConfirmed, entryPrice, stopPrice, maxLoss, lotSize = 100, feeSettings = null }) {
     if (!setupConfirmed) return { allowed: false, reason: "买点尚未确认", suggestedShares: 0, suggestedLots: 0 };
     if (![entryPrice, stopPrice, maxLoss, lotSize].every(Number.isFinite) || entryPrice <= 0 || stopPrice <= 0 || stopPrice >= entryPrice || maxLoss <= 0 || lotSize <= 0) {
       return { allowed: false, reason: "买入价、结构止损或最大亏损无效", suggestedShares: 0, suggestedLots: 0 };
     }
-    const rawShares = Math.floor(maxLoss / (entryPrice - stopPrice));
-    const suggestedShares = Math.floor(rawShares / lotSize) * lotSize;
+    let suggestedShares;
+    if (feeSettings && typeof feeSettings === "object") {
+      let lowLots = 0;
+      let highLots = Math.floor(maxLoss / ((entryPrice - stopPrice) * lotSize));
+      while (lowLots < highLots) {
+        const middle = Math.ceil((lowLots + highLots) / 2);
+        const shares = middle * lotSize;
+        const risk = (entryPrice - stopPrice) * shares
+          + estimateTradeFees(entryPrice, shares, "buy", feeSettings).total
+          + estimateTradeFees(stopPrice, shares, "sell", feeSettings).total;
+        if (risk <= maxLoss) lowLots = middle;
+        else highLots = middle - 1;
+      }
+      suggestedShares = lowLots * lotSize;
+    } else {
+      const rawShares = Math.floor(maxLoss / (entryPrice - stopPrice));
+      suggestedShares = Math.floor(rawShares / lotSize) * lotSize;
+    }
     if (!suggestedShares) return { allowed: false, reason: "风险预算不足一手", suggestedShares: 0, suggestedLots: 0 };
     return {
       allowed: true,
@@ -243,11 +559,21 @@
   }
 
   root.StockTradeRules = Object.freeze({
+    DEFAULT_FEE_SETTINGS,
+    normalizeFeeSettings,
+    estimateTradeFees,
+    calculateNetPosition,
+    getForwardSignalMetrics,
+    summarizeForwardMetrics,
+    calculateVolumeProfile,
+    evaluateDecisionDataGate,
+    resolveCanonicalDecision,
     isSnapshotCoherent,
     evaluateBuySignal,
     evaluateThemeGate,
     evaluateStockGate,
     getBenchmarkAverageChange,
+    getRefreshDelay,
     isTransactionDateAllowed,
     getEligibleTransactionIds,
     evaluatePositionPermission,

@@ -1,4 +1,4 @@
-const APP_VERSION = "v0.4.2 交易日期校验";
+const APP_VERSION = "v0.6.0 成交密集区";
 const STOCKS_KEY = "stock-review-stocks-v1";
 const HIDDEN_STOCKS_KEY = "stock-review-hidden-stocks-v1";
 const NOTES_KEY = "stock-review-notes-v1";
@@ -6,6 +6,7 @@ const TRADES_KEY = "stock-review-trades-v1";
 const SELLS_KEY = "stock-review-sells-v1";
 const REVIEW_SHEET_KEY = "stock-review-sheet-v1";
 const WATCH_STOCKS_KEY = "stock-watch-v1";
+const FEE_SETTINGS_KEY = "stock-review-fees-v1";
 const tradeRules = window.StockTradeRules;
 const JSONP_TIMEOUT = 9000;
 const EMBEDDED_MODE = new URLSearchParams(window.location.search).get("embed") === "1";
@@ -45,6 +46,8 @@ let notes = loadNotes();
 let trades = loadTrades();
 let sells = loadSells();
 let reviewSheetRows = loadReviewSheetRows();
+let feeSettings = loadFeeSettings();
+let watchDecisionContext = {};
 let quotes = {};
 let klines = {};
 let klineStatus = {};
@@ -67,6 +70,7 @@ const currentChange = document.getElementById("currentChange");
 const maStrip = document.getElementById("maStrip");
 const canvas = document.getElementById("klineCanvas");
 const chartEmpty = document.getElementById("chartEmpty");
+const costAreaSummary = document.getElementById("costAreaSummary");
 const tradeLegend = document.getElementById("tradeLegend");
 const tradePulse = document.getElementById("tradePulse");
 const tradeDateInput = document.getElementById("tradeDateInput");
@@ -74,6 +78,12 @@ const tradePriceInput = document.getElementById("tradePriceInput");
 const tradeSharesInput = document.getElementById("tradeSharesInput");
 const addTradeBtn = document.getElementById("addTradeBtn");
 const costSummary = document.getElementById("costSummary");
+const feeSettingsPanel = document.getElementById("feeSettingsPanel");
+const commissionRateInput = document.getElementById("commissionRateInput");
+const commissionMinInput = document.getElementById("commissionMinInput");
+const stampDutyRateInput = document.getElementById("stampDutyRateInput");
+const transferFeeRateInput = document.getElementById("transferFeeRateInput");
+const slippageRateInput = document.getElementById("slippageRateInput");
 const tradeList = document.getElementById("tradeList");
 const sellPulse = document.getElementById("sellPulse");
 const sellDateInput = document.getElementById("sellDateInput");
@@ -102,6 +112,7 @@ const rangeButtons = [...document.querySelectorAll("[data-range]")];
 const tagButtons = [...document.querySelectorAll("[data-note-tag]")];
 
 versionPill.textContent = APP_VERSION;
+syncFeeSettingsForm();
 saveStocks();
 
 addBtn.addEventListener("click", addStockFromInput);
@@ -130,6 +141,9 @@ tagButtons.forEach((button) => {
 });
 
 window.addEventListener("resize", () => drawSelectedChart());
+window.addEventListener("message", handleWatchContextSync);
+feeSettingsPanel?.querySelectorAll("input").forEach((input) => input.addEventListener("change", saveFeeSettingsFromForm));
+if (EMBEDDED_MODE) window.parent.postMessage({ type: "stock-review-ready" }, "*");
 
 render();
 refreshAll(true);
@@ -233,6 +247,58 @@ function loadReviewSheetRows() {
 
 function saveReviewSheetRows() {
   localStorage.setItem(REVIEW_SHEET_KEY, JSON.stringify(reviewSheetRows));
+}
+
+function loadFeeSettings() {
+  try {
+    return tradeRules.normalizeFeeSettings(JSON.parse(localStorage.getItem(FEE_SETTINGS_KEY) || "{}"));
+  } catch {
+    return tradeRules.normalizeFeeSettings();
+  }
+}
+
+function saveFeeSettings() {
+  localStorage.setItem(FEE_SETTINGS_KEY, JSON.stringify(feeSettings));
+}
+
+function syncFeeSettingsForm() {
+  if (!commissionRateInput) return;
+  commissionRateInput.value = (feeSettings.commissionRate * 100).toString();
+  commissionMinInput.value = feeSettings.commissionMin.toString();
+  stampDutyRateInput.value = (feeSettings.stampDutyRate * 100).toString();
+  transferFeeRateInput.value = (feeSettings.transferFeeRate * 100).toString();
+  slippageRateInput.value = (feeSettings.slippageRate * 100).toString();
+}
+
+function saveFeeSettingsFromForm() {
+  feeSettings = tradeRules.normalizeFeeSettings({
+    commissionRate: Number(commissionRateInput.value) / 100,
+    commissionMin: Number(commissionMinInput.value),
+    stampDutyRate: Number(stampDutyRateInput.value) / 100,
+    transferFeeRate: Number(transferFeeRateInput.value) / 100,
+    slippageRate: Number(slippageRateInput.value) / 100
+  });
+  saveFeeSettings();
+  syncFeeSettingsForm();
+  notifyWatchAppFeeSettings();
+  renderSelected();
+}
+
+function handleWatchContextSync(event) {
+  const data = event?.data;
+  if (event.source !== window.parent || !data || data.type !== "stock-watch-context-sync") return;
+  if (data.fees) {
+    feeSettings = tradeRules.normalizeFeeSettings(data.fees);
+    saveFeeSettings();
+    syncFeeSettingsForm();
+  }
+  watchDecisionContext = data.decisions && typeof data.decisions === "object" ? data.decisions : {};
+  renderSelected();
+}
+
+function notifyWatchAppFeeSettings() {
+  if (!EMBEDDED_MODE) return;
+  window.parent.postMessage({ type: "stock-review-fees-sync", fees: feeSettings }, "*");
 }
 
 function saveNotes() {
@@ -401,6 +467,7 @@ function renderSelected() {
     renderExecutionScore("");
     renderReviewSheet();
     renderNotes("");
+    renderCostAreaSummary(null);
     drawEmptyChart("先加入一只股票");
     return;
   }
@@ -412,7 +479,8 @@ function renderSelected() {
 
   chartTitle.textContent = `${stock.name} ${stock.code}`;
   const status = klineStatus[stock.code];
-  chartSub.textContent = `${stock.theme} · ${kline?.items?.length ? `${kline.items.length}根日K · ${kline.source || "K线"}` : status?.detail || "等待日K"} · ${quote?.time ? formatQuoteTime(quote.time) : "待行情"}`;
+  const decision = watchDecisionContext[stock.code];
+  chartSub.textContent = `${stock.theme} · ${kline?.items?.length ? `${kline.items.length}根日K · ${kline.source || "K线"}` : status?.detail || "等待日K"} · ${quote?.time ? formatQuoteTime(quote.time) : "待行情"} · 统一结论 ${decision?.label || "等待监控台同步"}`;
   currentPrice.textContent = quote?.price ? formatMoney(quote.price) : latest ? formatMoney(latest.close) : "--";
   currentChange.textContent = quote ? `${signed(quote.changePercent)}%` : "--";
   currentChange.className = changeClass;
@@ -537,7 +605,7 @@ function renderTradeList(code) {
     <article class="trade-card">
       <div>
         <strong>${escapeHtml(trade.date)} · ${formatMoney(trade.price)}</strong>
-        <span>${formatShares(trade.shares)} · 成本 ${formatMoney(trade.price * trade.shares)}元</span>
+        <span>${formatShares(trade.shares)} · 买入金额 ${formatMoney(trade.price * trade.shares)}元</span>
         <small class="${getChangeClass(getTradePnl(trade, quote).pnlAmount)}">${formatTradePnlText(trade, quote)}</small>
       </div>
       <button class="mini-button danger" data-delete-trade="${trade.id}" type="button">删除</button>
@@ -639,22 +707,21 @@ function getCostSummary(code, quote) {
   const sellRows = sells[code] || [];
   const validRows = rows.filter((trade) => tradeRules.isTransactionDateAllowed(String(trade.date || ""), getTodayKey()) && Number(trade.price) > 0 && Number(trade.shares) > 0);
   const validSells = sellRows.filter((sell) => tradeRules.isTransactionDateAllowed(String(sell.date || ""), getTodayKey()) && Number(sell.price) > 0 && Number(sell.shares) > 0);
+  const net = tradeRules.calculateNetPosition({ buys: validRows, sells: validSells, currentPrice: quote?.price, feeSettings });
   const totalShares = validRows.reduce((sum, trade) => sum + Number(trade.shares), 0);
   const totalCost = validRows.reduce((sum, trade) => sum + Number(trade.price) * Number(trade.shares), 0);
   const avgCost = totalShares ? totalCost / totalShares : 0;
-  const soldShares = validSells.reduce((sum, sell) => sum + Number(sell.shares), 0);
-  const soldAmount = validSells.reduce((sum, sell) => sum + Number(sell.price) * Number(sell.shares), 0);
-  const matchedSoldShares = Math.min(soldShares, totalShares);
-  const realizedCost = avgCost * matchedSoldShares;
-  const realizedPnl = soldAmount - realizedCost;
-  const remainingShares = Math.max(0, totalShares - soldShares);
-  const remainingCost = avgCost * remainingShares;
-  const currentPrice = quote?.price || 0;
-  const currentValue = currentPrice && remainingShares ? currentPrice * remainingShares : 0;
+  const soldShares = net.soldShares;
+  const soldAmount = net.grossSoldAmount;
+  const realizedPnl = net.realizedPnl;
+  const remainingShares = net.remainingShares;
+  const remainingCost = net.remainingCost;
+  const currentPrice = net.currentPrice;
+  const currentValue = net.currentValue;
   const priceDiff = currentPrice && avgCost ? currentPrice - avgCost : 0;
-  const unrealizedPnl = currentValue && remainingCost ? currentValue - remainingCost : 0;
-  const pnlAmount = realizedPnl + unrealizedPnl;
-  const pnlPct = totalCost ? (pnlAmount / totalCost) * 100 : 0;
+  const unrealizedPnl = net.unrealizedPnl;
+  const pnlAmount = net.netPnl;
+  const pnlPct = net.pnlPct;
   return {
     count: validRows.length,
     sellCount: validSells.length,
@@ -670,6 +737,7 @@ function getCostSummary(code, quote) {
     currentValue,
     priceDiff,
     unrealizedPnl,
+    ...net,
     pnlAmount,
     pnlPct
   };
@@ -690,9 +758,9 @@ function renderCostSummary(code, summary) {
   const pnlClass = getChangeClass(summary.pnlAmount);
   costSummary.innerHTML = `
     <article class="cost-card">
-      <span>平均成本</span>
-      <strong>${formatMoney(summary.avgCost)}</strong>
-      <small>${formatShares(summary.totalShares)} · 成本${formatMoney(summary.totalCost)}元</small>
+      <span>费用后均价</span>
+      <strong>${formatMoney(summary.averageNetCost)}</strong>
+      <small>${formatShares(summary.totalShares)} · 买入净成本${formatMoney(summary.acquisitionCost)}元</small>
     </article>
     <article class="cost-card">
       <span>剩余持仓</span>
@@ -707,13 +775,19 @@ function renderCostSummary(code, summary) {
     <article class="cost-card ${pnlClass}">
       <span>已实现盈亏</span>
       <strong>${summary.sellCount ? `${signed(summary.realizedPnl)}元` : "--"}</strong>
-      <small>${summary.sellCount ? `卖出金额${formatMoney(summary.soldAmount)}元` : "卖出后自动计算"}</small>
+      <small>${summary.sellCount ? `扣卖出费用 · 卖出${formatMoney(summary.soldAmount)}元` : "卖出后扣费计算"}</small>
     </article>
     <article class="cost-card ${pnlClass}">
       <span>总盈亏</span>
       <strong>${summary.currentPrice ? `${signed(summary.pnlAmount)}元` : "--"}</strong>
-      <small>${summary.currentPrice ? `${signed(summary.pnlPct)}% · 浮动${signed(summary.unrealizedPnl)}元` : "等待当前价"}</small>
+      <small>${summary.currentPrice ? `${signed(summary.pnlPct)}% · 清仓费${formatMoney(summary.estimatedExitFees)}元` : "等待当前价"}</small>
     </article>
+    <article class="cost-card">
+      <span>净保本价</span>
+      <strong>${summary.remainingShares ? summary.breakEvenCovered ? "已实现覆盖" : formatMoney(summary.breakEvenPrice) : "--"}</strong>
+      <small>${summary.remainingShares ? summary.breakEvenCovered ? "已实现收益覆盖剩余成本" : `预计卖出费${formatMoney(summary.estimatedExitFees)}元` : "无剩余持仓"}</small>
+    </article>
+    ${summary.unmatchedSoldShares ? `<small class="cost-position-warning">卖出记录超出可追溯持仓 ${formatShares(summary.unmatchedSoldShares)}，该部分盈亏无法核算</small>` : ""}
   `;
 }
 
@@ -927,7 +1001,7 @@ function getExecutionScore(code) {
       level: "pass",
       title: "买入记录",
       label: `${rows.length}笔`,
-      detail: `平均成本${formatMoney(summary.avgCost)}，共${formatShares(summary.totalShares)}。`
+      detail: `费用后均价${formatMoney(summary.averageNetCost)}，共${formatShares(summary.totalShares)}。`
     },
     {
       level: chaseContext.level,
@@ -1047,11 +1121,8 @@ function getSellDisciplineContext(rows) {
 
 function getTradePnl(trade, quote) {
   const currentPrice = quote?.price || 0;
-  const shares = Number(trade.shares) || 0;
-  const cost = Number(trade.price) || 0;
-  const pnlAmount = currentPrice && shares ? (currentPrice - cost) * shares : 0;
-  const pnlPct = currentPrice && cost ? (currentPrice / cost - 1) * 100 : 0;
-  return { pnlAmount, pnlPct };
+  const net = tradeRules.calculateNetPosition({ buys: [trade], currentPrice, feeSettings });
+  return { pnlAmount: net.netPnl, pnlPct: net.pnlPct };
 }
 
 function formatTradePnlText(trade, quote) {
@@ -1061,18 +1132,21 @@ function formatTradePnlText(trade, quote) {
 }
 
 function getSellPnl(sell, summary) {
+  const matchedSale = summary?.sellResults?.find((item) => item.id && item.id === String(sell.id || ""));
+  if (matchedSale) return { pnlAmount: matchedSale.realizedPnl, pnlPct: matchedSale.pnlPct };
   const shares = Number(sell.shares) || 0;
   const price = Number(sell.price) || 0;
-  const avgCost = Number(summary?.avgCost) || 0;
-  const pnlAmount = avgCost && shares ? (price - avgCost) * shares : 0;
-  const pnlPct = avgCost ? (price / avgCost - 1) * 100 : 0;
+  const avgCost = Number(summary?.averageNetCost || summary?.avgCost) || 0;
+  const fees = tradeRules.estimateTradeFees(price, shares, "sell", feeSettings, { includeSlippage: false }).total;
+  const pnlAmount = avgCost && shares ? (price * shares - fees) - avgCost * shares : 0;
+  const pnlPct = avgCost && shares ? pnlAmount / (avgCost * shares) * 100 : 0;
   return { pnlAmount, pnlPct };
 }
 
 function formatSellPnlText(sell, summary) {
-  if (!summary?.avgCost) return "等待买入成本计算卖出盈亏";
+  if (!summary?.averageNetCost && !summary?.avgCost) return "等待买入成本计算卖出盈亏";
   const pnl = getSellPnl(sell, summary);
-  return `成本${formatMoney(summary.avgCost)} · ${signed(pnl.pnlAmount)}元 · ${signed(pnl.pnlPct)}%`;
+  return `费用后成本${formatMoney(summary.averageNetCost || summary.avgCost)} · 扣卖出费用 · ${signed(pnl.pnlAmount)}元 · ${signed(pnl.pnlPct)}%`;
 }
 
 function deleteTrade(code, id) {
@@ -1264,13 +1338,17 @@ function csvCell(value) {
 function drawSelectedChart() {
   const stock = stocks.find((item) => item.code === selectedCode);
   if (!stock || !klines[stock.code]?.items?.length) {
+    renderCostAreaSummary(null, 0);
     drawEmptyChart(klineStatus[stock?.code]?.detail || "等待K线数据");
     renderTradeLegend([]);
     return;
   }
   const items = klines[stock.code].items.slice(-rangeDays);
   const visibleMarkers = getVisibleTradeMarkers(stock.code, items);
-  drawKlineChart(items, quotes[stock.code], visibleMarkers);
+  const completedItems = items.filter((item) => item.date && item.date < getTodayKey());
+  const profile = tradeRules.calculateVolumeProfile(completedItems);
+  renderCostAreaSummary(profile);
+  drawKlineChart(items, quotes[stock.code], visibleMarkers, profile);
 }
 
 function drawEmptyChart(text) {
@@ -1281,7 +1359,7 @@ function drawEmptyChart(text) {
   chartEmpty.classList.remove("hidden");
 }
 
-function drawKlineChart(items, quote, visibleTrades = []) {
+function drawKlineChart(items, quote, visibleTrades = [], volumeProfile = null) {
   const ctx = canvas.getContext("2d");
   const { width, height } = resizeCanvas(ctx);
   renderTradeLegend(visibleTrades);
@@ -1297,8 +1375,9 @@ function drawKlineChart(items, quote, visibleTrades = []) {
 
   const maValues = items.flatMap((item) => [item.ma5, item.ma10, item.ma20]).filter(Number.isFinite);
   const tradePrices = visibleTrades.map((trade) => trade.price).filter(Number.isFinite);
-  const high = Math.max(...items.map((item) => item.high), ...maValues, ...tradePrices);
-  const low = Math.min(...items.map((item) => item.low), ...maValues, ...tradePrices);
+  const profilePrices = volumeProfile ? [volumeProfile.upper, volumeProfile.lower] : [];
+  const high = Math.max(...items.map((item) => item.high), ...maValues, ...tradePrices, ...profilePrices);
+  const low = Math.min(...items.map((item) => item.low), ...maValues, ...tradePrices, ...profilePrices);
   const padding = Math.max((high - low) * 0.08, high * 0.005);
   const maxPrice = high + padding;
   const minPrice = Math.max(0, low - padding);
@@ -1310,6 +1389,7 @@ function drawKlineChart(items, quote, visibleTrades = []) {
   const yOf = (price) => margin.top + (maxPrice - price) / (maxPrice - minPrice || 1) * priceHeight;
 
   drawGrid(ctx, margin, chartWidth, priceHeight, priceBottom, minPrice, maxPrice, items);
+  drawCostArea(ctx, volumeProfile, margin, chartWidth, yOf);
 
   items.forEach((item, index) => {
     const x = xOf(index);
@@ -1350,6 +1430,40 @@ function drawKlineChart(items, quote, visibleTrades = []) {
     ctx.fillStyle = "#c52727";
     ctx.fillText(formatMoney(quote.price), width - margin.right + 6, y + 4);
   }
+}
+
+function renderCostAreaSummary(profile) {
+  if (!costAreaSummary) return;
+  costAreaSummary.innerHTML = profile
+    ? `<strong>成交密集区</strong><span>日K估算 · ${Math.round(profile.valueAreaPercent * 100)}%区间 ${formatMoney(profile.lower)}–${formatMoney(profile.upper)} · 中枢 ${formatMoney(profile.volumeWeightedCenter)} · POC ${formatMoney(profile.poc)} · ${profile.barCount}根完整日K</span>`
+    : `<strong>成交密集区</strong><span>日K估算 · 暂无有效成交量数据</span>`;
+}
+
+function drawCostArea(ctx, profile, margin, chartWidth, yOf) {
+  if (!profile) return;
+  const upperY = yOf(profile.upper);
+  const lowerY = yOf(profile.lower);
+  const top = Math.min(upperY, lowerY);
+  const height = Math.max(2, Math.abs(lowerY - upperY));
+  ctx.fillStyle = "rgba(15, 118, 110, 0.10)";
+  ctx.fillRect(margin.left, top, chartWidth, height);
+  ctx.strokeStyle = "rgba(15, 118, 110, 0.62)";
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 3]);
+  [upperY, lowerY].forEach((y) => {
+    ctx.beginPath();
+    ctx.moveTo(margin.left, y);
+    ctx.lineTo(margin.left + chartWidth, y);
+    ctx.stroke();
+  });
+  const centerY = yOf(profile.volumeWeightedCenter);
+  ctx.setLineDash([]);
+  ctx.strokeStyle = "#0f766e";
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(margin.left, centerY);
+  ctx.lineTo(margin.left + chartWidth, centerY);
+  ctx.stroke();
 }
 
 function drawGrid(ctx, margin, chartWidth, priceHeight, priceBottom, minPrice, maxPrice, items) {
@@ -1464,7 +1578,7 @@ function renderTradeLegend(visibleTrades) {
 function formatLegendPnl(code) {
   const summary = getCostSummary(code, quotes[code]);
   if (!summary?.count || !summary.currentPrice) return "等待成本和现价";
-  return `成本${formatMoney(summary.avgCost)}，剩余${formatShares(summary.remainingShares)}，总盈亏${signed(summary.pnlAmount)}元`;
+  return `费用后均价${formatMoney(summary.averageNetCost)}，剩余${formatShares(summary.remainingShares)}，净盈亏${signed(summary.pnlAmount)}元`;
 }
 
 function resizeCanvas(ctx) {

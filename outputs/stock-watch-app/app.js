@@ -13,7 +13,7 @@ const THEME_HISTORY_STORAGE_KEY = "stock-watch-theme-history-v1";
 const COLLAPSE_STORAGE_KEY = "stock-watch-collapsed-panels-v1";
 const WATCH_MIGRATION_STORAGE_KEY = "stock-watch-watch-migrations-v1";
 const UI_STORAGE_KEY = "stock-watch-ui-v1";
-const APP_VERSION = "v1.8.1 数据/样本加固";
+const APP_VERSION = "v1.9.0 净值/前瞻统一";
 const tradeRules = window.StockTradeRules;
 const JSONP_TIMEOUT = 9000;
 const RADAR_PAGE_SIZE = 80;
@@ -43,7 +43,8 @@ const defaultSettings = {
   radarLimit: 24,
   strongScore: 80,
   requireMarketConfirm: true,
-  accountCapital: 40000
+  accountCapital: 40000,
+  fees: tradeRules.DEFAULT_FEE_SETTINGS
 };
 
 const tradePlanProfiles = {
@@ -590,6 +591,7 @@ let flowSnapshots = loadFlowSnapshots();
 let signalSnapshots = loadSignalSnapshots();
 let signalOutcomes = loadSignalOutcomes();
 let signalActiveSetups = loadSignalActiveSetups();
+let canonicalDecisionByCode = {};
 let radarHistory = loadRadarHistory();
 let themeHistory = loadThemeHistory();
 let collapsedPanelIds = loadCollapsedPanels();
@@ -674,6 +676,8 @@ const reviewLogHint = document.getElementById("reviewLogHint");
 const signalAuditRows = document.getElementById("signalAuditRows");
 const signalAuditPulse = document.getElementById("signalAuditPulse");
 const signalAuditBreakdown = document.getElementById("signalAuditBreakdown");
+const signalAuditForwardSummary = document.getElementById("signalAuditForwardSummary");
+const reviewFrame = document.getElementById("reviewFrame");
 const refreshSecondsInput = document.getElementById("refreshSecondsInput");
 const marketCapInput = document.getElementById("marketCapInput");
 const radarPagesInput = document.getElementById("radarPagesInput");
@@ -780,6 +784,7 @@ fields.group.addEventListener("change", () => {
   if (fields.group.value === "holding") fields.layer.value = "normal";
 });
 window.addEventListener("message", handleReviewHoldingSync);
+reviewFrame?.addEventListener("load", syncReviewContext);
 resetSeedBtn.addEventListener("click", () => {
   stocks = structuredClone(seedStocks);
   quotes = {};
@@ -1073,12 +1078,26 @@ function resetIgnoredRadar() {
 }
 
 document.addEventListener("visibilitychange", () => {
-  if (autoRefresh) restartAutoRefresh();
+  if (!autoRefresh) return;
+  restartAutoRefresh();
+  if (!document.hidden) refreshQuotes();
 });
 
 function handleReviewHoldingSync(event) {
   const data = event?.data;
-  if (!data || data.type !== "stock-review-holding-sync") return;
+  if (reviewFrame?.contentWindow && event.source !== reviewFrame.contentWindow) return;
+  if (!data) return;
+  if (data.type === "stock-review-ready") {
+    syncReviewContext();
+    return;
+  }
+  if (data.type === "stock-review-fees-sync") {
+    settings = { ...settings, fees: tradeRules.normalizeFeeSettings(data.fees) };
+    saveSettings();
+    render();
+    return;
+  }
+  if (data.type !== "stock-review-holding-sync") return;
   stocks = loadStocks();
   saveStocks();
   render();
@@ -1133,7 +1152,7 @@ function applyWatchMigrations(list) {
 function loadSettings() {
   try {
     const stored = JSON.parse(localStorage.getItem(CONFIG_STORAGE_KEY));
-    return { ...defaultSettings, ...(stored || {}) };
+    return { ...defaultSettings, ...(stored || {}), fees: tradeRules.normalizeFeeSettings(stored?.fees) };
   } catch {
     return structuredClone(defaultSettings);
   }
@@ -1454,6 +1473,7 @@ function saveSettingsFromForm() {
     radarLimit: clamp(Number(radarLimitInput.value) || defaultSettings.radarLimit, 9, 60),
     strongScore: clamp(Number(strongScoreInput.value) || defaultSettings.strongScore, 50, 95),
     accountCapital: clamp(Number(accountCapitalInput?.value) || defaultSettings.accountCapital, 10000, 10000000),
+    fees: tradeRules.normalizeFeeSettings(settings.fees),
     requireMarketConfirm: Boolean(requireMarketInput.checked)
   };
   saveSettings();
@@ -1602,6 +1622,7 @@ function openEditor(item) {
 }
 
 function render() {
+  canonicalDecisionByCode = {};
   const analyzed = stocks
     .map((stock, index) => {
       const normalized = normalizeStock(stock);
@@ -1610,12 +1631,14 @@ function render() {
       const analysis = analyzeStock(normalized, quote, technical);
       const strengthGates = getStrengthGates(normalized, quote, analysis);
       const buyLights = getBuyLights(normalized, quote, technical, analysis);
-      captureConfirmedSignalSnapshot(normalized, quote, technical, analysis, strengthGates, buyLights);
       const support = getSupportCheck(normalized, quote, technical, analysis);
       const dynamicStop = getDynamicStopPlan(normalized, quote, technical, analysis, support);
       const structureStop = getStructureStopPlan(normalized, quote, technical, analysis, support, dynamicStop);
       const sellGrade = getSellGrade(normalized, quote, technical, analysis, support, dynamicStop, structureStop);
-      return { stock: normalized, analysis, sortMeta: getWatchSortMeta(normalized, analysis, index, sellGrade) };
+      const decision = getCanonicalDecision(normalized, quote, technical, analysis, strengthGates, buyLights, sellGrade, structureStop);
+      canonicalDecisionByCode[normalized.code] = decision;
+      captureConfirmedSignalSnapshot(normalized, quote, technical, analysis, strengthGates, buyLights, decision);
+      return { stock: normalized, analysis, decision, sortMeta: getWatchSortMeta(normalized, analysis, index, sellGrade, decision) };
     });
   const visible = analyzed
     .filter((item) => watchFilterMatches(item))
@@ -1643,6 +1666,7 @@ function render() {
   renderCapitalFlows();
   renderAuction();
   renderReviewModule();
+  syncReviewContext();
 }
 
 function watchFilterMatches(item) {
@@ -1656,14 +1680,14 @@ function watchFilterMatches(item) {
   return stock.group === activeFilter;
 }
 
-function getWatchSortMeta(stock, analysis, index, sellGrade = null) {
+function getWatchSortMeta(stock, analysis, index, sellGrade = null, decision = null) {
   const holding = stock.group === "holding";
   const urgentSell = holding && (
     sellGrade?.grade === "clear" ||
     sellGrade?.grade === "reduce" ||
     sellGrade?.action === "等收盘确认"
   );
-  const confirmedBuy = analysis.point.side === "买点" && analysis.point.level === "buy";
+  const confirmedBuy = decision?.state === "confirmed";
   const rank = tradeRules.getWatchRank({
     retired: stock.layer === "retired",
     urgentSell,
@@ -1719,6 +1743,8 @@ function getTodayActionItem(stock, index) {
   const dynamicStop = getDynamicStopPlan(stock, quote, technical, analysis, support);
   const structureStop = getStructureStopPlan(stock, quote, technical, analysis, support, dynamicStop);
   const sellGrade = getSellGrade(stock, quote, technical, analysis, support, dynamicStop, structureStop);
+  const buyLights = getBuyLights(stock, quote, technical, analysis);
+  const decision = getCanonicalDecision(stock, quote, technical, analysis, strengthGates, buyLights, sellGrade, structureStop);
   const livermore = getLivermoreKey(stock, quote, technical, analysis, support, sellGrade, buyGate);
   const planCheck = getTradePlanCheck(stock, quote, analysis, getStockCoreRole(stock.code, stock.theme), dynamicStop, structureStop);
   const brief = getTradeBrief(stock, quote, technical, analysis, buyGate);
@@ -1726,7 +1752,7 @@ function getTodayActionItem(stock, index) {
   const position = getStockPosition(stock);
   const bucket = getTodayActionBucket(stock, analysis, buyGate, sellGrade, dynamicStop, support, livermore);
   const priority = getTodayActionPriority(bucket, stock, analysis, buyGate, sellGrade, dynamicStop, livermore);
-  return { stock, quote, technical, valuation, strengthGates, analysis, buyGate, support, dynamicStop, sellGrade, livermore, planCheck, brief, klineStatus, position, bucket, priority, index };
+  return { stock, quote, technical, valuation, strengthGates, analysis, buyGate, decision, support, dynamicStop, sellGrade, livermore, planCheck, brief, klineStatus, position, bucket, priority, index };
 }
 
 function getTodayActionBucket(stock, analysis, buyGate, sellGrade, dynamicStop, support, livermore) {
@@ -1769,12 +1795,12 @@ function getForbiddenActions(items) {
       };
     }
 
-    if (analysis.dataQuality?.blockBuy) {
+    if (analysis.dataQuality?.blockBuy || item.decision?.dataGate?.state !== "pass") {
       return {
         stock,
         level: "warn",
         title: "禁止确认买点",
-        detail: "行情或K线不完整，任何买点都只能算观察。"
+        detail: item.decision?.dataGate?.reason || "行情或K线不完整，任何买点都只能算观察。"
       };
     }
 
@@ -1910,15 +1936,7 @@ function renderActionCard(item) {
   const { stock, quote, analysis, buyGate, sellGrade, livermore, valuation, strengthGates, brief, klineStatus, position } = item;
   const changeClass = quote ? getChangeClass(quote.changePercent) : "flat";
   const priceText = quote?.price ? `${formatMoney(quote.price)} · ${signed(quote.changePercent)}%` : "待行情";
-  const mainLine = item.bucket === "must" && livermore?.level === "danger"
-    ? `${livermore.label} · ${livermore.action}`
-    : item.bucket === "must"
-      ? `${sellGrade.label} · ${sellGrade.action}`
-      : livermore?.level === "buy"
-        ? livermore.label
-        : buyGate.level === "buy"
-          ? buyGate.label
-          : analysis.action.label;
+  const mainLine = item.decision?.label || "数据待齐";
   const actionText = item.bucket === "must" ? brief.sell : item.bucket === "focus" ? brief.buy : brief.watch;
   return `
     <article class="action-card ${item.bucket}">
@@ -1951,7 +1969,8 @@ function renderRow(stock) {
   const price = quote?.price;
   const changeClass = quote ? getChangeClass(quote.changePercent) : "flat";
   const cost = Number(stock.cost);
-  const pnl = price && cost ? (price / cost - 1) * 100 : null;
+  const netPnl = price && cost ? getStockNetPnl(stock, price) : null;
+  const pnl = netPnl ? netPnl.pnlPct : null;
   const pnlClass = pnl === null ? "flat" : getChangeClass(pnl);
   const costText = cost ? `成本 ${formatMoney(cost)}` : "未设成本";
   const targetText = stock.target ? `目标 ${formatMoney(stock.target)}` : "未设目标";
@@ -1972,6 +1991,7 @@ function renderRow(stock) {
   const planCheck = getTradePlanCheck(stock, quote, analysis, coreRole, dynamicStop, structureStop);
   const scaleInPlan = getScaleInPlan(stock, quote, technical, analysis, buyGate, buyLights, structureStop, planCheck, supportCheck);
   const sellGrade = getSellGrade(stock, quote, technical, analysis, supportCheck, dynamicStop, structureStop);
+  const decision = getCanonicalDecision(stock, quote, technical, analysis, strengthGates, buyLights, sellGrade, structureStop);
   const livermoreKey = getLivermoreKey(stock, quote, technical, analysis, supportCheck, sellGrade, buyGate);
   const planStatus = getPlanStatus(stock, quote, analysis, planCheck, dynamicStop, sellGrade);
   const preBuyCheck = getPreBuyCheck(stock, quote, technical, analysis, buyGate, strengthGates, buyLights, planCheck);
@@ -1999,12 +2019,11 @@ function renderRow(stock) {
 
         <div class="watch-quick-row">
           <span class="score-pill ${analysis.scoreClass}">${analysis.score}分</span>
-          <span class="badge ${analysis.action.level}">${analysis.action.label}</span>
+          <span class="badge ${decision.state === "confirmed" ? "buy" : decision.state === "sell" ? "sell" : decision.state === "candidate" ? "warn" : "info"}">${escapeHtml(decision.label)}</span>
           <span class="strength-gate-pill ${strengthGates.level}">闸门 ${escapeHtml(strengthGates.label)}</span>
-          <span>K线 ${escapeHtml(klineStatus.label)}</span>
-          <span class="buy-gate ${preBuyCheck.level}">买前 ${escapeHtml(preBuyCheck.label)}</span>
-          <span class="structure-summary-pill ${structureStop.level}">结构 ${escapeHtml(structureStop.action)}</span>
-          <span class="sell-summary-pill ${sellGrade.level}">卖出 ${escapeHtml(sellGrade.label)}</span>
+          ${stock.group === "holding" || Number(stock.shares) > 0
+            ? `<span class="sell-summary-pill ${sellGrade.level}">卖出 ${escapeHtml(sellGrade.label)}</span>`
+            : `<span class="buy-gate ${preBuyCheck.level}">买前 ${escapeHtml(preBuyCheck.label)}</span>`}
         </div>
 
         <details class="watch-detail">
@@ -2121,8 +2140,8 @@ function renderRow(stock) {
   `;
 }
 
-function captureConfirmedSignalSnapshot(stock, quote, technical, analysis, strengthGates, buyLights) {
-  if (!quote || !technical || analysis.dataQuality?.blockBuy || !strengthGates.snapshotCoherent) return;
+function captureConfirmedSignalSnapshot(stock, quote, technical, analysis, strengthGates, buyLights, decision) {
+  if (!quote || !technical || analysis.dataQuality?.blockBuy || !strengthGates.snapshotCoherent || decision?.state !== "confirmed") return;
   const active = signalActiveSetups[stock.code];
   if (!buyLights.setupConfirmed) {
     if (strengthGates.gates.every((gate) => gate.state !== "wait") && active) {
@@ -2177,6 +2196,7 @@ function captureConfirmedSignalSnapshot(stock, quote, technical, analysis, stren
       theme: themeFetchedAt || 0,
       funds: radarFetchedAt || 0
     },
+    dataGate: { state: decision.dataGate.state, reason: decision.dataGate.reason },
     dataSources: {
       quote: quote.source || "行情接口",
       kline: technical.source || "日K接口"
@@ -2199,22 +2219,31 @@ function renderReviewModule() {
   const disciplineItems = stocks
     .map(normalizeStock)
     .map((stock) => {
-      const analysis = analyzeStock(stock, quotes[stock.code], technicals[stock.code]);
-      const buyGate = getBuyGate(stock, quotes[stock.code], technicals[stock.code], analysis);
-      const brief = getTradeBrief(stock, quotes[stock.code], technicals[stock.code], analysis, buyGate);
-      return { stock, analysis, brief };
+      const quote = quotes[stock.code];
+      const technical = technicals[stock.code];
+      const analysis = analyzeStock(stock, quote, technical);
+      const strengthGates = getStrengthGates(stock, quote, analysis);
+      const buyGate = getBuyGate(stock, quote, technical, analysis);
+      const buyLights = getBuyLights(stock, quote, technical, analysis);
+      const support = getSupportCheck(stock, quote, technical, analysis);
+      const dynamicStop = getDynamicStopPlan(stock, quote, technical, analysis, support);
+      const structureStop = getStructureStopPlan(stock, quote, technical, analysis, support, dynamicStop);
+      const sellGrade = getSellGrade(stock, quote, technical, analysis, support, dynamicStop, structureStop);
+      const decision = getCanonicalDecision(stock, quote, technical, analysis, strengthGates, buyLights, sellGrade, structureStop);
+      const brief = getTradeBrief(stock, quote, technical, analysis, buyGate);
+      return { stock, analysis, brief, decision };
     })
     .sort((a, b) => getDisciplinePriority(b.analysis) - getDisciplinePriority(a.analysis))
     .slice(0, 6);
 
   disciplineRows.innerHTML = disciplineItems.length
-    ? disciplineItems.map(({ stock, analysis, brief }) => `
-        <article class="discipline-row ${brief.level}">
+    ? disciplineItems.map(({ stock, analysis, brief, decision }) => `
+        <article class="discipline-row ${decision.state === "confirmed" ? "buy" : decision.state === "sell" ? "sell" : brief.level}">
           <div>
             <strong>${escapeHtml(stock.name)}</strong>
-            <span>${stock.code} · ${escapeHtml(analysis.action.label)} · ${analysis.score}分</span>
+            <span>${stock.code} · ${escapeHtml(decision.label)} · ${analysis.score}分</span>
           </div>
-          <p>${escapeHtml(brief.buy)}</p>
+          <p>${escapeHtml(decision.reason)} · ${escapeHtml(brief.buy)}</p>
         </article>
       `).join("")
     : `<div class="empty compact">暂无自选纪律</div>`;
@@ -2232,6 +2261,14 @@ function renderReviewModule() {
     : `<div class="empty compact">还没有复盘日志。行情刷新后出现强信号、卖点、数据异常会自动记录；也可以手动写入。</div>`;
 }
 
+function getCompletedDailyBars(technical) {
+  const today = getLocalDateKey();
+  return (technical?.items || []).filter((item) => {
+    const date = String(item.date || "").slice(0, 10);
+    return date < today || (date === today && isCurrentSessionClosed(technical));
+  });
+}
+
 function renderSignalAudit() {
   if (!signalAuditRows || !signalAuditPulse) return;
   const latest = signalSnapshots.slice(-8).reverse();
@@ -2246,6 +2283,7 @@ function renderSignalAudit() {
     if (counts[result] !== undefined) counts[result] += 1;
   });
   const groups = new Map();
+  const forwardBySignal = new Map();
   signalSnapshots.forEach((snapshot) => {
     const key = `${snapshot.setupType || "未知形态"} · ${snapshot.marketRegime || "环境未知"}`;
     const group = groups.get(key) || { count: 0, target: 0, invalidated: 0, unknown: 0 };
@@ -2253,6 +2291,8 @@ function renderSignalAudit() {
     const result = stateBySignal.get(snapshot.id)?.result || "unknown";
     if (group[result] !== undefined) group[result] += 1;
     groups.set(key, group);
+    const bars = getCompletedDailyBars(technicals[snapshot.code]);
+    forwardBySignal.set(snapshot.id, tradeRules.getForwardSignalMetrics(snapshot, bars, { asOfDate: bars.at(-1)?.date || null }));
   });
   signalAuditPulse.textContent = `${signalSnapshots.length}个样本 · 预案完成 ${counts.target} · 结构失效 ${counts.invalidated} · 待观察 ${counts.unknown} · 手动复核，非回测`;
   if (signalAuditBreakdown) {
@@ -2260,16 +2300,25 @@ function renderSignalAudit() {
       <span>${escapeHtml(label)} · n=${group.count} · 预案${group.target}/失效${group.invalidated}/待观察${group.unknown}</span>
     `).join("") || `<span>确认样本形成后，按形态与市场阶段汇总</span>`;
   }
+  const forwardSummary = tradeRules.summarizeForwardMetrics([...forwardBySignal.values()]);
+  if (signalAuditForwardSummary) {
+    signalAuditForwardSummary.innerHTML = `T+1/3/5/10 自动前瞻（完整样本） · ${forwardSummary.map((item) =>
+      `T+${item.horizon} n=${item.sampleCount}${item.sampleCount ? ` · 收涨${item.positiveRatePct}% · 均值${signed(item.averageCloseReturnPct)}% · 失效${item.invalidationHits}` : " · 样本未走满"}`
+    ).join("　")}`;
+  }
   signalAuditRows.innerHTML = latest.length
     ? latest.map((snapshot) => {
         const outcome = stateBySignal.get(snapshot.id);
         const resultLabel = outcome?.result === "target" ? "按预案完成" : outcome?.result === "invalidated" ? "结构失效" : "待观察";
+        const forward = forwardBySignal.get(snapshot.id) || [];
+        const forwardText = forward.map((item) => `T+${item.horizon} ${item.complete ? `${signed(item.closeReturnPct)}%${item.invalidationHit ? "·失效线触及" : ""}` : `${item.observedSessions}/${item.horizon}日进行中`}`).join(" · ");
         return `
           <article class="signal-audit-row">
             <div>
               <strong>${escapeHtml(snapshot.name)} · ${escapeHtml(snapshot.setupType)}</strong>
               <span>${escapeHtml(snapshot.sessionDate || "日期未知")} · ${formatMoney(snapshot.entryReference)} · 失效线 ${formatMoney(snapshot.invalidationLine)}</span>
-              <small>环境 ${escapeHtml(snapshot.marketRegime)} · ${resultLabel}</small>
+              <small>环境 ${escapeHtml(snapshot.marketRegime)} · 人工：${resultLabel}</small>
+              <small>自动：${escapeHtml(forwardText)}</small>
             </div>
             <div class="signal-audit-actions">
               <button class="mini-button" data-signal-id="${escapeHtml(snapshot.id)}" data-signal-result="target" type="button">按预案完成</button>
@@ -3103,9 +3152,13 @@ function getPositionRiskRows() {
       const positionValue = shares && price ? shares * price : 0;
       const plannedLoss = shares && cost && dynamicStop.hardLine
         ? Math.max((cost - dynamicStop.hardLine) * shares, 0)
+          + tradeRules.estimateTradeFees(cost, shares, "buy", settings.fees).total
+          + tradeRules.estimateTradeFees(dynamicStop.hardLine, shares, "sell", settings.fees).total
         : 0;
       const lockedProfit = shares && cost && dynamicStop.hardLine
-        ? Math.max((dynamicStop.hardLine - cost) * shares, 0)
+        ? Math.max((dynamicStop.hardLine - cost) * shares
+          - tradeRules.estimateTradeFees(cost, shares, "buy", settings.fees).total
+          - tradeRules.estimateTradeFees(dynamicStop.hardLine, shares, "sell", settings.fees).total, 0)
         : 0;
       const missing = [];
       if (!shares) missing.push("股数");
@@ -3736,6 +3789,17 @@ function renderStockPosition(position) {
   `;
 }
 
+function getStockNetPnl(stock, currentPrice) {
+  const cost = Number(stock?.cost);
+  const shares = Number(stock?.shares) > 0 ? Number(stock.shares) : 100;
+  if (!cost || !Number.isFinite(Number(currentPrice)) || Number(currentPrice) <= 0) return null;
+  return tradeRules.calculateNetPosition({
+    buys: [{ price: cost, shares }],
+    currentPrice: Number(currentPrice),
+    feeSettings: settings.fees
+  });
+}
+
 function getTradePlanCheck(stock, quote, analysis, coreRole, dynamicStop = null, structureStop = null) {
   const plan = normalizeTradePlan(stock.plan);
   const profile = tradePlanProfiles[plan.type] || tradePlanProfiles.swing;
@@ -3745,20 +3809,26 @@ function getTradePlanCheck(stock, quote, analysis, coreRole, dynamicStop = null,
   const shares = Number(stock.shares);
   const maxLoss = Number(plan.maxLoss);
   const price = quote?.price || 0;
-  const pnl = price && cost ? (price / cost - 1) * 100 : null;
+  const netPnl = price && cost ? getStockNetPnl(stock, price) : null;
+  const pnl = netPnl ? netPnl.pnlPct : null;
   const stopRiskPct = cost && stop && stop < cost ? (1 - stop / cost) * 100 : profile.defaultStopPct;
   const plannedStopLine = cost ? (stop && stop < cost ? stop : cost * (1 - profile.defaultStopPct / 100)) : 0;
   const positionPermission = tradeRules.evaluatePositionPermission({
     setupConfirmed: true,
     entryPrice: cost,
     stopPrice: stop,
-    maxLoss: plan.riskBudgetConfirmed ? maxLoss : 0
+    maxLoss: plan.riskBudgetConfirmed ? maxLoss : 0,
+    feeSettings: settings.fees
   });
   const suggestedShares = positionPermission.suggestedShares;
   const suggestedPosition = suggestedShares && cost ? suggestedShares * cost : 0;
   const suggestedLots = suggestedShares ? suggestedShares / 100 : 0;
   const currentPosition = shares && price ? shares * price : shares && cost ? shares * cost : 0;
-  const plannedLoss = shares && cost && plannedStopLine ? shares * Math.max(cost - plannedStopLine, 0) : 0;
+  const plannedLoss = shares && cost && plannedStopLine
+    ? shares * Math.max(cost - plannedStopLine, 0)
+      + tradeRules.estimateTradeFees(cost, shares, "buy", settings.fees).total
+      + tradeRules.estimateTradeFees(plannedStopLine, shares, "sell", settings.fees).total
+    : 0;
   const effectiveStopLine = tradeRules.getEffectiveStopLine(plannedStopLine, dynamicStop?.hardLine);
   const stopTouched = Boolean(price && effectiveStopLine && price <= effectiveStopLine);
   const currentTechnical = technicals[stock.code];
@@ -4090,7 +4160,8 @@ function getLivermoreKey(stock, quote, technical, analysis, support, sellGrade, 
 
   const price = quote.price || technical.latest?.close || 0;
   const cost = Number(stock.cost);
-  const pnlPct = price && cost ? (price / cost - 1) * 100 : null;
+  const netPnl = price && cost ? getStockNetPnl(stock, price) : null;
+  const pnlPct = netPnl ? netPnl.pnlPct : null;
   const volumeRatio = Number.isFinite(technical.volumeRatio) ? technical.volumeRatio : null;
   const aboveMa10 = Boolean(technical.ma10 && price >= technical.ma10);
   const aboveMa20 = Boolean(technical.ma20 && price >= technical.ma20);
@@ -4240,8 +4311,13 @@ function getPlanStatus(stock, quote, analysis, planCheck, dynamicStop, sellGrade
     };
   }
 
-  const pnl = price && cost ? (price / cost - 1) * 100 : null;
-  const plannedLoss = shares && cost && stop && stop < cost ? shares * (cost - stop) : 0;
+  const netPnl = price && cost ? getStockNetPnl(stock, price) : null;
+  const pnl = netPnl ? netPnl.pnlPct : null;
+  const plannedLoss = shares && cost && stop && stop < cost
+    ? shares * (cost - stop)
+      + tradeRules.estimateTradeFees(cost, shares, "buy", settings.fees).total
+      + tradeRules.estimateTradeFees(stop, shares, "sell", settings.fees).total
+    : 0;
   const overLossBudget = Boolean(plan.maxLoss && plannedLoss > plan.maxLoss);
   const hardBreak = dynamicStop?.level === "danger" || sellGrade?.grade === "clear" || (price && stop && price <= stop);
   const nearBreak = dynamicStop?.level === "warn" || sellGrade?.grade === "reduce" || (price && stop && price > stop && price <= stop * 1.02);
@@ -5985,9 +6061,10 @@ function restartAutoRefresh() {
 }
 
 function getRefreshDelay() {
-  const delay = settings.refreshSeconds * 1000;
-  if (document.hidden) return delay;
-  return isTradingWindow() ? delay : delay;
+  return window.StockTradeRules.getRefreshDelay(settings.refreshSeconds * 1000, {
+    tradingWindow: isTradingWindow(),
+    hidden: document.hidden
+  });
 }
 
 function isTradingWindow() {
@@ -6504,7 +6581,8 @@ function getBuyGate(stock, quote, technical, analysis) {
 
 function getBuyLights(stock, quote, technical, analysis) {
   const strengthGates = getStrengthGates(stock, quote, analysis);
-  const dataOk = !analysis.dataQuality?.blockBuy;
+  const decisionDataGate = getDecisionSnapshotStatus(stock.code, stock, analysis);
+  const dataOk = !analysis.dataQuality?.blockBuy && decisionDataGate.state === "pass";
   const structure = quote && technical ? getStructureTrigger(quote, technical, analysis.trend, analysis.volume) : null;
   const structureOk = Boolean(analysis.trend.strong && structure?.signal);
   const funds = getFundsConvergenceLight(stock);
@@ -6555,13 +6633,13 @@ function getBuyLights(stock, quote, technical, analysis) {
   ];
 
   const passCount = lights.filter((item) => item.state === "pass").length;
-  const signalState = analysis.point.label === "盘中候选" ? "candidate" : analysis.point.side === "买点" ? "confirmed" : "wait";
+  const signalState = !dataOk ? "wait" : analysis.point.label === "盘中候选" ? "candidate" : analysis.point.side === "买点" ? "confirmed" : "wait";
   return {
     dataGate: {
       label: "数据闸门",
-      state: dataOk ? "pass" : "block",
-      detail: analysis.dataQuality?.detail || "等待数据",
-      status: dataOk ? "通过" : "阻断"
+      state: dataOk ? "pass" : "wait",
+      detail: dataOk ? analysis.dataQuality?.detail || decisionDataGate.reason : decisionDataGate.reason,
+      status: dataOk ? "通过" : "等待"
     },
     lights,
     passCount,
@@ -6595,7 +6673,7 @@ function getStrengthGates(stock, quote, analysisLike = {}) {
   const themeInfo = themeState[theme];
   const dynamicThemeStrength = analysisLike.themeStrength || getThemeStrength(theme);
   const marketGate = marketState?.tenDayGate || getMarketTenDayGate(marketState?.indexes || [], null);
-  const snapshot = getDecisionSnapshotStatus(normalized.code);
+  const snapshot = getDecisionSnapshotStatus(normalized.code, normalized, analysisLike);
   const marketAvg = marketState?.benchmarkDataAvailable ? marketState.avgChange : null;
   const themeChange = Number.isFinite(themeInfo?.change) ? themeInfo.change : null;
   const themeGate = tradeRules.evaluateThemeGate({
@@ -6648,7 +6726,7 @@ function getStrengthGates(stock, quote, analysisLike = {}) {
     gates.forEach((gate) => {
       gate.state = "wait";
       gate.status = "等";
-      gate.detail = "行情、K线、大盘、板块时间未对齐";
+      gate.detail = snapshot.reason;
     });
   }
 
@@ -6667,23 +6745,72 @@ function getStrengthGates(stock, quote, analysisLike = {}) {
     detail: allPass
       ? "上证收盘站在MA10上，板块跑赢大盘，个股同时跑赢板块与大盘，才进入六灯筛选。"
       : !snapshot.coherent
-        ? "行情、K线、大盘、板块需在同一刷新窗口；时间未对齐时不确认买点。"
+        ? `${snapshot.reason}；未通过时不确认买点。`
         : "三闸门没开时，六灯只能作为观察参考，不触发确认买点。",
     gates,
     failedLabels,
     passCount,
     total: gates.length,
     snapshotCoherent: snapshot.coherent,
+    dataGate: snapshot,
     allPass
   };
 }
 
-function getDecisionSnapshotStatus(code) {
-  const timestamps = [quoteFetchedAt[code], technicalFetchedAt[code], marketFetchedAt, themeFetchedAt];
+function getDecisionSnapshotStatus(code, stock = null, analysis = null) {
+  const timestamps = [quoteFetchedAt[code], technicalFetchedAt[code], marketFetchedAt, themeFetchedAt, radarFetchedAt];
+  const quote = quotes[code];
+  const technical = technicals[code];
+  const theme = stock ? themeState[stock.theme] : null;
+  const ready = Boolean(
+    quote?.price && quote?.time && technical?.latest && technical?.items?.length &&
+    marketState?.benchmarkDataAvailable && theme?.source === "动态" &&
+    radarFetchedAt && !analysis?.dataQuality?.blockBuy
+  );
+  const dataGate = tradeRules.evaluateDecisionDataGate({
+    ready,
+    timestamps,
+    now: Date.now(),
+    maxSkewMs: 180000,
+    maxAgeMs: 180000
+  });
+  return { ...dataGate, timestamps };
+}
+
+function getCanonicalDecision(stock, quote, technical, analysis, strengthGates, buyLights, sellGrade, structureStop) {
+  const dataGate = getDecisionSnapshotStatus(stock.code, stock, analysis);
+  const buyState = buyLights?.setupConfirmed
+    ? "confirmed"
+    : analysis.point.label === "盘中候选" ? "candidate" : "wait";
+  const sellAction = sellGrade?.grade === "clear" ? "clear"
+    : sellGrade?.grade === "reduce" ? "reduce"
+      : sellGrade?.action === "等收盘确认" ? "wait-close"
+        : structureStop?.sellGateAction || "hold";
   return {
-    coherent: tradeRules.isSnapshotCoherent(timestamps, 90000, Date.now(), 120000),
-    timestamps
+    ...tradeRules.resolveCanonicalDecision({
+      dataState: dataGate.state,
+      holding: stock.group === "holding",
+      sellAction,
+      buyState
+    }),
+    dataGate,
+    strengthGates,
+    buyLights
   };
+}
+
+function syncReviewContext() {
+  if (!reviewFrame?.contentWindow) return;
+  const decisions = Object.fromEntries(Object.entries(canonicalDecisionByCode).map(([code, item]) => [code, {
+    state: item.state,
+    label: item.label,
+    reason: item.reason
+  }]));
+  reviewFrame.contentWindow.postMessage({
+    type: "stock-watch-context-sync",
+    fees: settings.fees || tradeRules.DEFAULT_FEE_SETTINGS,
+    decisions
+  }, "*");
 }
 
 function renderStrengthGates(strengthGates) {
@@ -6760,14 +6887,14 @@ function getLightState(pass, waiting = false) {
 }
 
 function renderBuyLights(buyLights) {
-  const status = buyLights.allPass
+  const status = buyLights.dataGate.state !== "pass"
+    ? `数据待齐 · ${buyLights.dataGate.detail}`
+    : buyLights.allPass
     ? "三闸门+六灯+结构收盘确认"
     : buyLights.signalState === "candidate"
       ? "盘中候选·等收盘确认"
     : !buyLights.strengthGates?.allPass
       ? "三闸门未开，六灯仅参考"
-    : buyLights.dataGate.state === "block"
-      ? "数据阻断"
       : `${buyLights.passCount}/${buyLights.total} 通过`;
   return `
     <section class="buy-light-panel ${buyLights.allPass ? "all-pass" : buyLights.dataGate.state === "block" ? "blocked" : "partial"}">
@@ -6776,7 +6903,7 @@ function renderBuyLights(buyLights) {
           <strong>六灯纪律</strong>
           <span>${status}</span>
         </div>
-        <span class="data-gate ${buyLights.strengthGates?.allPass ? buyLights.dataGate.state : "block"}">${buyLights.strengthGates?.label || buyLights.dataGate.label}</span>
+        <span class="data-gate ${buyLights.dataGate.state !== "pass" ? "wait" : buyLights.strengthGates?.allPass ? "pass" : "block"}">${buyLights.strengthGates?.label || buyLights.dataGate.label}</span>
       </div>
       <div class="buy-light-grid">
         ${buyLights.lights.map((item) => `
@@ -6801,7 +6928,8 @@ function getPreBuyCheck(stock, quote, technical, analysis, buyGate, strengthGate
     setupConfirmed,
     entryPrice: cost,
     stopPrice: stop,
-    maxLoss: plan.riskBudgetConfirmed ? maxLoss : 0
+    maxLoss: plan.riskBudgetConfirmed ? maxLoss : 0,
+    feeSettings: settings.fees
   });
   const blockers = [];
   const waits = [];
@@ -6811,7 +6939,7 @@ function getPreBuyCheck(stock, quote, technical, analysis, buyGate, strengthGate
 
   if (!quote) blockers.push("没有实时价");
   if (!technical) blockers.push("没有K线");
-  if (analysis.dataQuality?.blockBuy) blockers.push("数据不可靠");
+  if (analysis.dataQuality?.blockBuy || buyLights.dataGate.state !== "pass") blockers.push("统一数据闸门未通过");
   if (!cost) blockers.push("未填计划买价");
   if (!stop) blockers.push("未填止损");
   if (!maxLoss || !plan.riskBudgetConfirmed) blockers.push("未确认单笔最大亏损");
@@ -7027,7 +7155,8 @@ function getDynamicStopPlan(stock, quote, technical, analysis, support) {
   const cost = Number(stock.cost);
   const manualStop = Number(stock.stop);
   const price = quote?.price || 0;
-  const pnlPct = price && cost ? (price / cost - 1) * 100 : null;
+  const netPnl = price && cost ? getStockNetPnl(stock, price) : null;
+  const pnlPct = netPnl ? netPnl.pnlPct : null;
   const defaultStopLine = cost ? cost * (1 - profile.defaultStopPct / 100) : 0;
   const plannedStopLine = cost && manualStop && manualStop < cost ? manualStop : defaultStopLine;
   const points = [];
@@ -7452,13 +7581,14 @@ function getScaleInPlan(stock, quote, technical, analysis, buyGate, buyLights, s
   const price = quote?.price || technical?.latest?.close || 0;
   const cost = Number(stock.cost) || 0;
   const shares = Number(stock.shares) || 0;
-  const pnlPct = price && cost ? (price / cost - 1) * 100 : null;
+  const netPnl = price && cost ? getStockNetPnl(stock, price) : null;
+  const pnlPct = netPnl ? netPnl.pnlPct : null;
   const lotPlan = getScaleLotPlan(planCheck, price);
   const blockers = [];
   const waits = [];
   const confirmedBuy = analysis.point.side === "买点" && buyGate.level === "buy" && buyLights.allPass;
 
-  if (analysis.dataQuality?.blockBuy) blockers.push("数据不足");
+  if (analysis.dataQuality?.blockBuy || buyLights.dataGate.state !== "pass") blockers.push("统一数据闸门未通过");
   if (!planCheck.maxLoss || !planCheck.riskBudgetConfirmed) blockers.push("未确认单笔最大亏损");
   if (!stock.stop) blockers.push("未设手动结构止损线");
   if (structureStop?.level === "danger") blockers.push("结构破坏");
@@ -7477,7 +7607,10 @@ function getScaleInPlan(stock, quote, technical, analysis, buyGate, buyLights, s
     if (!maxLoss || !stopLine || !entryCost || !price || !addShares) return false;
     const newShares = shares + addShares;
     const plannedExposure = shares * entryCost + addShares * price;
-    const riskAtStop = Math.max(0, plannedExposure - newShares * stopLine);
+    const riskAtStop = Math.max(0, plannedExposure - newShares * stopLine)
+      + tradeRules.estimateTradeFees(entryCost, shares, "buy", settings.fees).total
+      + tradeRules.estimateTradeFees(price, addShares, "buy", settings.fees).total
+      + tradeRules.estimateTradeFees(stopLine, newShares, "sell", settings.fees).total;
     return riskAtStop <= maxLoss;
   };
 

@@ -64,6 +64,10 @@
           <button class="range-button" data-range="120" type="button">120日</button>
           <button class="range-button" data-range="240" type="button">240日</button>
         </div>
+        <div class="cost-area-summary" id="costAreaSummary" aria-live="polite">
+          <strong>成交密集区</strong>
+          <span>日K估算 · 等待K线成交量</span>
+        </div>
 
         <section class="trade-panel" aria-label="买卖标记">
           <div class="pane-head">
@@ -71,6 +75,17 @@
             <span id="tradePulse">买入看位置，卖出看纪律</span>
           </div>
           <div class="cost-summary" id="costSummary"></div>
+          <details class="fee-settings" id="feeSettingsPanel">
+            <summary>估算费率 <small>按券商交割单调整</small></summary>
+            <div class="fee-settings-grid">
+              <label><span>佣金 %/单边</span><input id="commissionRateInput" type="number" min="0" max="1" step="0.001"></label>
+              <label><span>佣金最低 元</span><input id="commissionMinInput" type="number" min="0" max="100" step="0.5"></label>
+              <label><span>印花税 %/卖出</span><input id="stampDutyRateInput" type="number" min="0" max="1" step="0.001"></label>
+              <label><span>过户费 %/单边</span><input id="transferFeeRateInput" type="number" min="0" max="1" step="0.001"></label>
+              <label><span>滑点 %/单边</span><input id="slippageRateInput" type="number" min="0" max="1" step="0.01"></label>
+            </div>
+            <small>净盈亏和保本价为估算值；实际以券商交割单为准。滑点只估算未来成交偏差，不重复扣实际成交。</small>
+          </details>
           <div class="trade-subhead">
             <strong>买入标记</strong>
             <span>蓝色 B 会画到K线上</span>
