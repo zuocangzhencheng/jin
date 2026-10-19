@@ -1,9 +1,9 @@
 .agents/
 .codex/
 work/
+node_modules/
 
 *.log
 *.tmp
 *.bak
 stock-watch-sync-*.json
-

@@ -1,0 +1,14 @@
+{
+  "name": "jin-stock-watch-app",
+  "version": "1.8.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "verify:dom": "node scripts/verify-dom.mjs",
+    "verify:review": "node scripts/verify-review-dom.mjs",
+    "verify:trade-rules": "node scripts/verify-trade-rules.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "^29.1.1"
+  }
+}

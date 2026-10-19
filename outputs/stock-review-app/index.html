@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>复盘K线台</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="review-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">A股复盘</p>
+        <h1>复盘K线台</h1>
+      </div>
+      <div class="toolbar">
+        <span class="version-pill" id="versionPill">v--</span>
+        <a class="ghost-button" href="../stock-watch-app/">监控台</a>
+        <button class="icon-button" id="refreshBtn" type="button" title="刷新行情" aria-label="刷新行情">↻</button>
+      </div>
+    </header>
+
+    <section class="quick-add" aria-label="添加股票">
+      <label>
+        <span>股票代码或名称</span>
+        <input id="stockInput" placeholder="深科技 / 000021 / 工业富联">
+      </label>
+      <button class="primary-button" id="addBtn" type="button">加入复盘</button>
+      <p id="addHint">加入后自动拉取当前价、日K、MA5/MA10/MA20。</p>
+    </section>
+
+    <section class="review-layout" aria-label="复盘工作区">
+      <aside class="watch-pane">
+        <div class="pane-head">
+          <h2>复盘自选</h2>
+          <span id="listPulse">等待行情</span>
+        </div>
+        <div class="stock-list" id="stockList"></div>
+      </aside>
+
+      <section class="chart-pane">
+        <div class="chart-head">
+          <div>
+            <h2 id="chartTitle">选择一只股票</h2>
+            <p id="chartSub">K线与均线会显示在这里</p>
+          </div>
+          <div class="price-box">
+            <strong id="currentPrice">--</strong>
+            <span id="currentChange">--</span>
+          </div>
+        </div>
+
+        <div class="ma-strip" id="maStrip"></div>
+
+        <div class="chart-wrap">
+          <canvas id="klineCanvas" width="960" height="520" aria-label="K线图"></canvas>
+          <div class="chart-empty" id="chartEmpty">等待K线数据</div>
+        </div>
+
+        <div class="trade-legend" id="tradeLegend"></div>
+
+        <div class="chart-tools" aria-label="K线周期">
+          <button class="range-button active" data-range="60" type="button">60日</button>
+          <button class="range-button" data-range="120" type="button">120日</button>
+          <button class="range-button" data-range="240" type="button">240日</button>
+        </div>
+
+        <section class="trade-panel" aria-label="买卖标记">
+          <div class="pane-head">
+            <h2>买卖标记</h2>
+            <span id="tradePulse">买入看位置，卖出看纪律</span>
+          </div>
+          <div class="cost-summary" id="costSummary"></div>
+          <div class="trade-subhead">
+            <strong>买入标记</strong>
+            <span>蓝色 B 会画到K线上</span>
+          </div>
+          <div class="trade-form">
+            <label>
+              <span>买入日期</span>
+              <input id="tradeDateInput" type="date">
+            </label>
+            <label>
+              <span>买入价</span>
+              <input id="tradePriceInput" type="number" min="0" step="0.001" placeholder="56.030">
+            </label>
+            <label>
+              <span>股数</span>
+              <input id="tradeSharesInput" type="number" min="0" step="100" placeholder="100">
+            </label>
+            <button class="primary-button" id="addTradeBtn" type="button">加到K线</button>
+          </div>
+          <div class="trade-list" id="tradeList"></div>
+
+          <div class="trade-subhead sell">
+            <strong>卖出标记</strong>
+            <span id="sellPulse">红色 S 会画到K线上</span>
+          </div>
+          <div class="trade-form sell-form">
+            <label>
+              <span>卖出日期</span>
+              <input id="sellDateInput" type="date">
+            </label>
+            <label>
+              <span>卖出价</span>
+              <input id="sellPriceInput" type="number" min="0" step="0.001" placeholder="56.030">
+            </label>
+            <label>
+              <span>股数</span>
+              <input id="sellSharesInput" type="number" min="0" step="1" placeholder="100">
+            </label>
+            <label>
+              <span>卖出原因</span>
+              <select id="sellReasonInput">
+                <option value="按计划止盈">按计划止盈</option>
+                <option value="分批减仓">分批减仓</option>
+                <option value="触发止损">触发止损</option>
+                <option value="破位卖出">破位卖出</option>
+                <option value="情绪割肉">情绪割肉</option>
+                <option value="手滑误卖">手滑误卖</option>
+                <option value="换股">换股</option>
+              </select>
+            </label>
+            <label>
+              <span>是否计划内</span>
+              <select id="sellPlannedInput">
+                <option value="计划内">计划内</option>
+                <option value="计划外">计划外</option>
+                <option value="待复盘">待复盘</option>
+              </select>
+            </label>
+            <button class="primary-button" id="addSellBtn" type="button">记录卖出</button>
+          </div>
+          <div class="trade-list sell-list" id="sellList"></div>
+        </section>
+
+        <section class="score-panel" aria-label="执行评分">
+          <div class="pane-head">
+            <h2>执行评分</h2>
+            <span id="scorePulse">按计划记录后自动评分</span>
+          </div>
+          <div class="execution-score" id="executionScoreRows"></div>
+        </section>
+
+        <section class="sheet-panel" aria-label="Excel式复盘表">
+          <div class="pane-head">
+            <h2>Excel式复盘表</h2>
+            <span id="sheetPulse">像表格一样记录交易事实</span>
+            <button class="mini-button" id="exportSheetBtn" type="button">导出CSV</button>
+          </div>
+          <div class="sheet-form">
+            <label>
+              <span>日期</span>
+              <input id="sheetDateInput" type="date">
+            </label>
+            <label>
+              <span>动作</span>
+              <select id="sheetActionInput">
+                <option value="买入">买入</option>
+                <option value="卖出">卖出</option>
+                <option value="持仓观察">持仓观察</option>
+                <option value="空仓等待">空仓等待</option>
+              </select>
+            </label>
+            <label>
+              <span>计划内外</span>
+              <select id="sheetPlannedInput">
+                <option value="计划内">计划内</option>
+                <option value="计划外">计划外</option>
+                <option value="待复盘">待复盘</option>
+              </select>
+            </label>
+            <label>
+              <span>错误类型</span>
+              <select id="sheetMistakeInput">
+                <option value="无">无</option>
+                <option value="追高">追高</option>
+                <option value="低位割肉">低位割肉</option>
+                <option value="冲高没卖">冲高没卖</option>
+                <option value="无计划交易">无计划交易</option>
+                <option value="仓位过重">仓位过重</option>
+                <option value="手滑误操作">手滑误操作</option>
+              </select>
+            </label>
+            <label class="wide">
+              <span>明日计划</span>
+              <input id="sheetPlanInput" placeholder="只看承接；跌破计划价执行；不追回卖飞">
+            </label>
+            <button class="primary-button" id="addSheetRowBtn" type="button">写入表格</button>
+          </div>
+          <div class="sheet-table-wrap">
+            <table class="review-sheet-table" id="reviewSheetTable"></table>
+          </div>
+        </section>
+
+        <section class="note-panel" aria-label="复盘笔记">
+          <div class="pane-head">
+            <h2>复盘笔记</h2>
+            <span id="notePulse">按股票保存</span>
+          </div>
+          <textarea id="noteInput" rows="5" placeholder="写今天的K线、承接、量能、买卖计划。例：缩量回踩MA10未破，明天只看能否放量收回。"></textarea>
+          <div class="note-actions">
+            <div class="tag-buttons">
+              <button class="mini-button" data-note-tag="强承接" type="button">强承接</button>
+              <button class="mini-button" data-note-tag="缩量回踩" type="button">缩量回踩</button>
+              <button class="mini-button" data-note-tag="放量分歧" type="button">放量分歧</button>
+              <button class="mini-button" data-note-tag="等确认" type="button">等确认</button>
+            </div>
+            <button class="primary-button" id="saveNoteBtn" type="button">保存笔记</button>
+          </div>
+          <div class="note-list" id="noteList"></div>
+        </section>
+      </section>
+    </section>
+  </main>
+
+  <script src="../stock-watch-app/trade-rules.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

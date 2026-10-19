@@ -3,29 +3,89 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="refresh" content="0; url=./outputs/stock-watch-app/">
-  <title>主线选股监控台</title>
+  <title>交易工具入口</title>
   <style>
+    :root {
+      --bg: #f4f6f8;
+      --ink: #151923;
+      --muted: #667085;
+      --line: #d9dee8;
+      --blue: #1c64f2;
+      --blue-soft: #e8f0ff;
+      --shadow: 0 14px 34px rgba(21, 25, 35, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       margin: 0;
+      min-width: 320px;
       min-height: 100vh;
+      color: var(--ink);
+      background: var(--bg);
+      font-family: "Microsoft YaHei", "Segoe UI", Arial, sans-serif;
       display: grid;
       place-items: center;
-      color: #151923;
-      background: #f4f6f8;
-      font-family: "Microsoft YaHei", "Segoe UI", Arial, sans-serif;
+    }
+
+    main {
+      width: min(760px, calc(100% - 32px));
+    }
+
+    h1,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      margin-bottom: 8px;
+      font-size: 30px;
+      letter-spacing: 0;
+    }
+
+    p {
+      color: var(--muted);
+      line-height: 1.55;
     }
 
     a {
-      color: #1c64f2;
-      font-weight: 700;
+      min-height: 132px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--ink);
+      background: #fff;
+      box-shadow: var(--shadow);
+      text-decoration: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      margin-top: 18px;
     }
+
+    a strong {
+      color: var(--blue);
+      font-size: 20px;
+    }
+
+    a span {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
   </style>
 </head>
 <body>
   <main>
-    <p>正在打开主线选股监控台...</p>
-    <p><a href="./outputs/stock-watch-app/">如果没有自动跳转，点击这里进入 App</a></p>
+    <h1>选股监控 App</h1>
+    <p>一个入口完成盘中筛选、主线观察、资金雷达、持仓风控、复盘K线和交易笔记。</p>
+    <a href="./outputs/stock-watch-app/" aria-label="进入选股监控 App">
+      <strong>进入主 App</strong>
+      <span>顶部页签切换总览、自选、主线、雷达、复盘K线、日志和设置。</span>
+    </a>
   </main>
 </body>
 </html>

@@ -15,15 +15,22 @@
       </div>
       <div class="toolbar">
         <span class="version-pill" id="versionPill">v--</span>
-        <button class="ghost-button compact-button" id="collapseAllBtn" type="button">折叠</button>
-        <button class="ghost-button compact-button" id="expandAllBtn" type="button">展开</button>
+        <button class="ghost-button compact-button" id="settingsOpenBtn" type="button">设置</button>
         <button class="icon-button" id="refreshBtn" title="刷新行情" aria-label="刷新行情">↻</button>
         <button class="ghost-button auto-on" id="autoToggleBtn" type="button">自动中</button>
         <button class="primary-button" id="addOpenBtn">新增</button>
       </div>
     </section>
 
-    <section class="metrics" aria-label="账户概览">
+    <nav class="app-nav" id="appNav" aria-label="功能页签">
+      <button class="app-tab active" data-page-target="overview" type="button">总览</button>
+      <button class="app-tab" data-page-target="watch" type="button">自选</button>
+      <button class="app-tab" data-page-target="mainline" type="button">主线</button>
+      <button class="app-tab" data-page-target="radar" type="button">雷达</button>
+      <button class="app-tab" data-page-target="review" type="button">复盘</button>
+    </nav>
+
+    <section class="metrics" aria-label="账户概览" data-app-page="overview">
       <div class="metric">
         <span>自选数量</span>
         <strong id="metricCount">0</strong>
@@ -50,19 +57,32 @@
       </div>
     </section>
 
-    <section class="panel gold-panel" aria-label="黄金价格" data-collapse-id="gold">
-      <div class="panel-head">
-        <div>
-          <h2>黄金价格</h2>
-          <p id="goldPulse">等待伦敦金现货刷新</p>
-        </div>
-        <button class="ghost-button" id="goldRefreshBtn" type="button">刷新金价</button>
-      </div>
-      <div class="gold-strip" id="goldRows"></div>
+    <section class="data-health-panel" aria-label="数据状态" data-app-page="overview">
+      <div class="data-health-strip" id="dataHealthRows"></div>
     </section>
 
-    <section class="insight-grid" aria-label="市场与策略">
-      <section class="panel market-panel" aria-label="市场环境" data-collapse-id="market">
+    <section class="panel action-panel" aria-label="今日行动清单" data-collapse-id="today-action" data-app-page="overview">
+      <div class="panel-head compact">
+        <div>
+          <h2>今日行动清单</h2>
+          <p id="todayActionPulse">先看必须处理，再看重点盯，最后才看机会</p>
+        </div>
+      </div>
+      <div class="action-board" id="todayActionRows"></div>
+    </section>
+
+    <section class="panel risk-overview-panel" aria-label="持仓风险总览" data-collapse-id="risk-overview" data-app-page="overview">
+      <div class="panel-head compact">
+        <div>
+          <h2>持仓风险总览</h2>
+          <p id="positionRiskPulse">按成本、股数和动态止损计算</p>
+        </div>
+      </div>
+      <div class="risk-overview-strip" id="positionRiskRows"></div>
+    </section>
+
+    <section class="insight-grid page-cluster" aria-label="市场与策略">
+      <section class="panel market-panel" aria-label="市场环境" data-collapse-id="market" data-app-page="overview">
         <div class="panel-head compact">
           <div>
             <h2>市场环境</h2>
@@ -71,17 +91,27 @@
           <span class="state-pill" id="marketStatePill">--</span>
         </div>
         <div class="market-strip" id="marketRows"></div>
+        <div class="liquidity-block" aria-label="宏观流动性">
+          <div class="flow-block-head">
+            <strong>宏观流动性灯</strong>
+            <span id="macroLiquidityPulse">等待市场成交和资金方向</span>
+          </div>
+          <div class="liquidity-grid" id="macroLiquidityRows"></div>
+        </div>
         <div class="flow-block" aria-label="资金流向">
           <div class="flow-block-head">
             <strong>资金流向</strong>
             <span id="flowPulse">等待资金雷达扫描</span>
           </div>
           <div class="flow-list" id="flowRows"></div>
-          <div class="flow-timeline" id="flowTimelineRows"></div>
+          <details class="market-disclosure">
+            <summary>资金流向时间轴</summary>
+            <div class="flow-timeline" id="flowTimelineRows"></div>
+          </details>
         </div>
       </section>
 
-      <section class="panel theme-panel" aria-label="主线强度" data-collapse-id="theme">
+      <section class="panel theme-panel" aria-label="主线强度" data-collapse-id="theme" data-app-page="mainline">
         <div class="panel-head compact">
           <div>
             <h2>主线强度</h2>
@@ -89,9 +119,11 @@
           </div>
         </div>
         <div class="theme-list" id="themeRows"></div>
+        <div class="theme-rank-summary" id="themeRankSummary"></div>
+        <div class="theme-history" id="themeHistoryRows"></div>
       </section>
 
-      <section class="panel settings-panel" aria-label="策略设置" data-collapse-id="settings">
+      <section class="panel settings-panel" aria-label="策略设置" data-collapse-id="settings" data-app-page="settings">
         <div class="panel-head compact">
           <div>
             <h2>策略设置</h2>
@@ -120,9 +152,13 @@
             <span>强信号分</span>
             <input id="strongScoreInput" type="number" min="50" max="95" step="5">
           </label>
+          <label>
+            <span>账户资金</span>
+            <input id="accountCapitalInput" type="number" min="10000" max="10000000" step="1000">
+          </label>
           <label class="check-row">
             <input id="requireMarketInput" type="checkbox">
-            <span>买点要求市场/主线确认</span>
+            <span>买点要求市场/主线确认（上证MA10闸门始终强制）</span>
           </label>
           <div class="settings-actions">
             <button class="ghost-button" id="resetSettingsBtn" type="button">重置</button>
@@ -132,7 +168,7 @@
       </section>
     </section>
 
-    <section class="panel core-panel" aria-label="中军龙头自动切换" data-collapse-id="core">
+    <section class="panel core-panel" aria-label="中军龙头自动切换" data-collapse-id="core" data-app-page="mainline">
       <div class="panel-head">
         <div>
           <h2>中军 / 龙头</h2>
@@ -142,7 +178,7 @@
       <div class="core-list" id="coreRows"></div>
     </section>
 
-    <section class="panel radar-panel" aria-label="资金异动雷达" data-collapse-id="radar">
+    <section class="panel radar-panel" aria-label="资金异动雷达" data-collapse-id="radar" data-app-page="radar">
       <div class="panel-head">
         <div>
           <h2>资金异动雷达</h2>
@@ -154,9 +190,10 @@
         </div>
       </div>
       <div class="radar-list" id="radarRows"></div>
+      <div class="radar-history-strip" id="radarHistoryRows"></div>
     </section>
 
-    <section class="panel theme-radar-panel" aria-label="主线聚合雷达" data-collapse-id="theme-radar">
+    <section class="panel theme-radar-panel" aria-label="主线聚合雷达" data-collapse-id="theme-radar" data-app-page="mainline radar">
       <div class="panel-head">
         <div>
           <h2>主线聚合雷达</h2>
@@ -166,7 +203,7 @@
       <div class="theme-radar-list" id="themeRadarRows"></div>
     </section>
 
-    <section class="panel auction-panel" aria-label="集合竞价观察" data-collapse-id="auction">
+    <section class="panel auction-panel" aria-label="集合竞价观察" data-collapse-id="auction" data-app-page="radar">
       <div class="panel-head">
         <div>
           <h2>集合竞价观察</h2>
@@ -177,7 +214,7 @@
       <div class="auction-list" id="auctionRows"></div>
     </section>
 
-    <section class="panel review-panel" aria-label="自选同步与复盘日志" data-collapse-id="review">
+    <section class="panel review-panel" aria-label="自选同步与复盘日志" data-collapse-id="review-log" data-app-page="review">
       <div class="panel-head">
         <div>
           <h2>自选同步 / 复盘日志</h2>
@@ -200,12 +237,32 @@
           <div class="discipline-list" id="disciplineRows"></div>
         </section>
 
+        <section class="review-block" aria-label="复盘统计">
+          <div class="review-block-head">
+            <h3>复盘统计</h3>
+            <span>看错误集中在哪里</span>
+          </div>
+          <div class="review-stats" id="reviewStatsRows"></div>
+          <details class="signal-audit">
+            <summary><strong>确认买点信号</strong><span id="signalAuditPulse">0个样本 · 手动复核，非回测</span></summary>
+            <small class="signal-audit-note">只记录三闸门、六灯和收盘结构信号；不代表仓位许可或实际成交。</small>
+            <div class="signal-audit-breakdown" id="signalAuditBreakdown"></div>
+            <div id="signalAuditRows"></div>
+          </details>
+        </section>
+
         <section class="review-block" aria-label="手动复盘">
           <div class="review-block-head">
             <h3>手动复盘</h3>
             <span>写下原因，比记住情绪可靠</span>
           </div>
           <textarea id="manualLogInput" rows="5" placeholder="例：工业富联放量但离20日高点还差一点，今天只盯不追；若明天放量突破且大盘顺风再看分批。"></textarea>
+          <div class="error-template-actions" aria-label="错误交易模板">
+            <button class="mini-button" data-error-template="panic-sell" type="button">低位割肉</button>
+            <button class="mini-button" data-error-template="chase" type="button">追高</button>
+            <button class="mini-button" data-error-template="plan-break" type="button">未按计划</button>
+            <button class="mini-button" data-error-template="oversize" type="button">仓位过重</button>
+          </div>
           <div class="review-actions">
             <button class="primary-button" id="manualLogBtn" type="button">写入日志</button>
             <button class="ghost-button" id="clearLogBtn" type="button">清空日志</button>
@@ -222,7 +279,17 @@
       </div>
     </section>
 
-    <section class="panel watch-panel" aria-label="自选列表" data-collapse-id="watch">
+    <section class="panel kline-panel" aria-label="复盘K线" data-collapse-id="kline-review" data-app-page="review">
+      <div class="panel-head">
+        <div>
+          <h2>复盘K线</h2>
+          <p>自选、当前价、日K、MA5/MA10/MA20、买卖标记、执行评分和表格复盘集中在这里</p>
+        </div>
+      </div>
+      <iframe class="review-frame" id="reviewFrame" title="复盘K线台" src="../stock-review-app/index.html?embed=1"></iframe>
+    </section>
+
+    <section class="panel watch-panel" aria-label="自选列表" data-collapse-id="watch" data-app-page="watch">
       <div class="panel-head">
         <div>
           <h2>自选列表</h2>
@@ -230,9 +297,13 @@
         </div>
         <div class="filter-tabs" role="tablist" aria-label="筛选">
           <button class="tab active" data-filter="all">全部</button>
+          <button class="tab" data-filter="focus">重点</button>
           <button class="tab" data-filter="alert">提醒</button>
           <button class="tab" data-filter="holding">持仓</button>
           <button class="tab" data-filter="watch">观察</button>
+          <button class="tab" data-filter="core">核心</button>
+          <button class="tab" data-filter="temp">临时</button>
+          <button class="tab" data-filter="retired">淘汰</button>
         </div>
       </div>
 
@@ -258,15 +329,41 @@
           <input id="nameInput" placeholder="自动识别后可手动改">
         </label>
         <label>
-          <span>成本价</span>
+          <span>成本 / 计划买价</span>
           <input id="costInput" type="number" step="0.01" min="0" placeholder="22.10">
         </label>
+        <label>
+          <span>持仓股数</span>
+          <input id="sharesInput" type="number" step="100" min="0" placeholder="100">
+        </label>
+        <details class="position-lots-fields wide">
+          <summary>批次与 T+1 记录</summary>
+          <div class="position-lots-grid">
+            <label>
+              <span>历史仓位可卖股数</span>
+              <input id="legacySellableInput" type="number" step="100" min="0" placeholder="旧仓批次不明时手动核对">
+            </label>
+            <label>
+              <span>今日新增买入股数</span>
+              <input id="todayBuySharesInput" type="number" step="100" min="0" placeholder="0">
+            </label>
+            <label>
+              <span>今日新增买入价</span>
+              <input id="todayBuyPriceInput" type="number" step="0.01" min="0" placeholder="新增股数时必填">
+            </label>
+            <label>
+              <span>记录今日卖出股数</span>
+              <input id="todaySellSharesInput" type="number" step="1" min="0" placeholder="0">
+            </label>
+          </div>
+          <small>今日买入股数自动计入总持仓并锁定至下一交易日；卖出只接受已核对可卖数量。</small>
+        </details>
         <label>
           <span>目标价</span>
           <input id="targetInput" type="number" step="0.01" min="0" placeholder="26.00">
         </label>
         <label>
-          <span>止损价</span>
+          <span>计划止损 / 结构失效价</span>
           <input id="stopInput" type="number" step="0.01" min="0" placeholder="20.80">
         </label>
         <label>
@@ -274,6 +371,15 @@
           <select id="groupInput">
             <option value="holding">持仓</option>
             <option value="watch">观察</option>
+          </select>
+        </label>
+        <label>
+          <span>观察层级</span>
+          <select id="layerInput">
+            <option value="normal">普通观察</option>
+            <option value="core">核心观察</option>
+            <option value="temp">临时观察</option>
+            <option value="retired">已淘汰</option>
           </select>
         </label>
         <label>
@@ -291,7 +397,7 @@
             <option value="光通信/海缆">光通信/海缆</option>
             <option value="风电设备">风电设备</option>
             <option value="有色金属">有色金属</option>
-            <option value="贵金属/黄金">贵金属/黄金</option>
+            <option value="小金属">小金属</option>
             <option value="稀土永磁">稀土永磁</option>
             <option value="煤炭能源">煤炭能源</option>
             <option value="其他">其他</option>
@@ -300,6 +406,38 @@
         <label class="wide">
           <span>逻辑</span>
           <input id="noteInput" placeholder="化合物半导体 / 电子特气 / AI算力">
+        </label>
+        <label>
+          <span>交易类型</span>
+          <select id="planTypeInput">
+            <option value="swing">趋势波段</option>
+            <option value="short">短线试错</option>
+            <option value="long">长线配置</option>
+          </select>
+        </label>
+        <label>
+          <span>买入日期</span>
+          <input id="entryDateInput" type="date">
+        </label>
+        <label>
+          <span>单笔最大亏损</span>
+          <input id="maxLossInput" type="number" step="50" min="0" placeholder="600">
+        </label>
+        <label>
+          <span>卖出闸门</span>
+          <select id="sellTimingInput">
+            <option value="close-confirm">收盘确认卖</option>
+            <option value="reduce-first">先减半再确认</option>
+            <option value="hard-stop">硬止损盘中可卖</option>
+          </select>
+        </label>
+        <label class="check-row wide">
+          <input id="coreOnlyInput" type="checkbox">
+          <span>科技分歧时只做中军/龙头/核心，后排自动降级</span>
+        </label>
+        <label class="check-row wide">
+          <input id="riskBudgetConfirmedInput" type="checkbox">
+          <span>我已确认单笔最大亏损上限，用它反推计划股数</span>
         </label>
       </div>
 
@@ -310,6 +448,7 @@
     </form>
   </dialog>
 
+  <script src="./trade-rules.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>
