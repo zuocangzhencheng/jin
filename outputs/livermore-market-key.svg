@@ -1,0 +1,125 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1120" viewBox="0 0 1600 1120">
+  <defs>
+    <style>
+      .bg { fill: #f5f7fb; }
+      .panel { fill: #ffffff; stroke: #d7deea; stroke-width: 2; }
+      .title { font: 800 42px "Microsoft YaHei", "Segoe UI", Arial, sans-serif; fill: #141824; }
+      .subtitle { font: 500 22px "Microsoft YaHei", "Segoe UI", Arial, sans-serif; fill: #5f6b7a; }
+      .h { font: 800 27px "Microsoft YaHei", "Segoe UI", Arial, sans-serif; fill: #141824; }
+      .body { font: 500 21px "Microsoft YaHei", "Segoe UI", Arial, sans-serif; fill: #3c4655; }
+      .small { font: 500 18px "Microsoft YaHei", "Segoe UI", Arial, sans-serif; fill: #647084; }
+      .tag { font: 800 19px "Microsoft YaHei", "Segoe UI", Arial, sans-serif; }
+      .buy { fill: #1763e8; }
+      .sell { fill: #c8272d; }
+      .warn { fill: #a66200; }
+      .ok { fill: #087443; }
+      .line-up { fill: none; stroke: #1763e8; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; }
+      .line-down { fill: none; stroke: #c8272d; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; }
+      .dash { fill: none; stroke: #8b96a8; stroke-width: 3; stroke-dasharray: 10 9; }
+      .arrow { fill: none; stroke: #2f3947; stroke-width: 4; marker-end: url(#arrow); }
+      .blueBox { fill: #eaf1ff; stroke: #b9ccff; stroke-width: 2; }
+      .redBox { fill: #fff0f0; stroke: #ffc6c8; stroke-width: 2; }
+      .amberBox { fill: #fff7e7; stroke: #f3d08f; stroke-width: 2; }
+      .greenBox { fill: #ecf8f1; stroke: #b7e5cc; stroke-width: 2; }
+      .grid { stroke: #e7ebf2; stroke-width: 2; }
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#2f3947"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1600" height="1120"/>
+  <text class="title" x="80" y="78">利弗莫尔市场钥匙：上升趋势栏与自然回撤栏</text>
+  <text class="subtitle" x="80" y="120">核心：用足够大的价格波动过滤噪音，把“趋势推进”和“正常回撤/反弹”分栏记录。</text>
+
+  <rect class="panel" x="70" y="160" width="705" height="595" rx="22"/>
+  <rect class="panel" x="825" y="160" width="705" height="595" rx="22"/>
+
+  <text class="h buy" x="110" y="214">上涨结构：上升趋势栏 → 自然回撤栏 → 重新确认</text>
+  <text class="h sell" x="865" y="214">下跌结构：下降趋势栏 → 自然反弹栏 → 重新确认</text>
+
+  <line class="grid" x1="110" y1="680" x2="735" y2="680"/>
+  <line class="grid" x1="110" y1="580" x2="735" y2="580"/>
+  <line class="grid" x1="110" y1="480" x2="735" y2="480"/>
+  <line class="grid" x1="110" y1="380" x2="735" y2="380"/>
+
+  <path class="line-up" d="M125 650 L235 575 L350 470 L470 360 L560 480 L665 335"/>
+  <circle cx="125" cy="650" r="9" fill="#1763e8"/>
+  <circle cx="235" cy="575" r="9" fill="#1763e8"/>
+  <circle cx="350" cy="470" r="9" fill="#1763e8"/>
+  <circle cx="470" cy="360" r="10" fill="#1763e8"/>
+  <circle cx="560" cy="480" r="10" fill="#a66200"/>
+  <circle cx="665" cy="335" r="10" fill="#087443"/>
+
+  <line class="dash" x1="470" y1="360" x2="560" y2="480"/>
+  <text class="tag warn" x="492" y="438">回撤约6点</text>
+  <text class="small" x="118" y="705">价格不断创新高：记录在“上升趋势栏”</text>
+  <text class="small" x="430" y="515">从高点明显回落：转入“自然回撤栏”</text>
+  <text class="small ok" x="525" y="315">再度转强/突破前高：趋势延续</text>
+
+  <rect class="blueBox" x="110" y="245" width="275" height="86" rx="16"/>
+  <text class="tag buy" x="130" y="279">上升趋势栏</text>
+  <text class="small" x="130" y="310">只记录有效新高和推进</text>
+
+  <rect class="amberBox" x="410" y="245" width="300" height="86" rx="16"/>
+  <text class="tag warn" x="430" y="279">自然回撤栏</text>
+  <text class="small" x="430" y="310">不是卖点，先看是否正常</text>
+
+  <path class="arrow" d="M360 330 C420 345, 455 365, 500 420"/>
+  <path class="arrow" d="M560 460 C610 435, 635 400, 655 350"/>
+
+  <line class="grid" x1="865" y1="680" x2="1490" y2="680"/>
+  <line class="grid" x1="865" y1="580" x2="1490" y2="580"/>
+  <line class="grid" x1="865" y1="480" x2="1490" y2="480"/>
+  <line class="grid" x1="865" y1="380" x2="1490" y2="380"/>
+
+  <path class="line-down" d="M880 345 L990 425 L1110 520 L1225 640 L1320 525 L1440 675"/>
+  <circle cx="880" cy="345" r="9" fill="#c8272d"/>
+  <circle cx="990" cy="425" r="9" fill="#c8272d"/>
+  <circle cx="1110" cy="520" r="9" fill="#c8272d"/>
+  <circle cx="1225" cy="640" r="10" fill="#c8272d"/>
+  <circle cx="1320" cy="525" r="10" fill="#a66200"/>
+  <circle cx="1440" cy="675" r="10" fill="#087443"/>
+
+  <line class="dash" x1="1225" y1="640" x2="1320" y2="525"/>
+  <text class="tag warn" x="1240" y="565">反弹约6点</text>
+  <text class="small" x="872" y="705">价格不断创新低：记录在“下降趋势栏”</text>
+  <text class="small" x="1188" y="500">从低点明显反弹：转入“自然反弹栏”</text>
+  <text class="small ok" x="1278" y="720">再次转弱/跌破前低：趋势延续</text>
+
+  <rect class="redBox" x="865" y="245" width="275" height="86" rx="16"/>
+  <text class="tag sell" x="885" y="279">下降趋势栏</text>
+  <text class="small" x="885" y="310">只记录有效新低和下跌推进</text>
+
+  <rect class="amberBox" x="1165" y="245" width="300" height="86" rx="16"/>
+  <text class="tag warn" x="1185" y="279">自然反弹栏</text>
+  <text class="small" x="1185" y="310">不是反转，先看能否突破</text>
+
+  <path class="arrow" d="M1140 630 C1195 615, 1240 585, 1305 535"/>
+  <path class="arrow" d="M1325 545 C1370 585, 1400 630, 1430 665"/>
+
+  <rect class="panel" x="70" y="790" width="1460" height="255" rx="22"/>
+  <text class="h" x="110" y="845">怎么读这张图</text>
+
+  <rect class="greenBox" x="110" y="875" width="322" height="122" rx="16"/>
+  <text class="tag ok" x="132" y="913">① 趋势栏</text>
+  <text class="body" x="132" y="947">上升趋势栏记录“有效新高”</text>
+  <text class="body" x="132" y="976">下降趋势栏记录“有效新低”</text>
+
+  <rect class="amberBox" x="460" y="875" width="322" height="122" rx="16"/>
+  <text class="tag warn" x="482" y="913">② 自然回撤/反弹栏</text>
+  <text class="body" x="482" y="947">从趋势极值反向约6点</text>
+  <text class="body" x="482" y="976">先当正常波动，不立刻反转</text>
+
+  <rect class="blueBox" x="810" y="875" width="322" height="122" rx="16"/>
+  <text class="tag buy" x="832" y="913">③ 确认</text>
+  <text class="body" x="832" y="947">重新放量转强/转弱</text>
+  <text class="body" x="832" y="976">突破前高或跌破前低才确认</text>
+
+  <rect class="redBox" x="1160" y="875" width="322" height="122" rx="16"/>
+  <text class="tag sell" x="1182" y="913">④ 失效</text>
+  <text class="body" x="1182" y="947">回撤后不能再创新高</text>
+  <text class="body" x="1182" y="976">并跌破回撤低点，要降风险</text>
+
+  <text class="small" x="110" y="1032">注：原书“6点/3点”来自美股旧价格环境；A股实战更适合换成 6%-8%、ATR、5/10日线、前高平台等动态阈值。</text>
+</svg>
