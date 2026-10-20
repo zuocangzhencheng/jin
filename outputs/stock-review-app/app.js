@@ -1,4 +1,4 @@
-const APP_VERSION = "v0.6.0 成交密集区";
+const APP_VERSION = "v0.6.2 现价轴范围修正";
 const STOCKS_KEY = "stock-review-stocks-v1";
 const HIDDEN_STOCKS_KEY = "stock-review-hidden-stocks-v1";
 const NOTES_KEY = "stock-review-notes-v1";
@@ -1376,8 +1376,10 @@ function drawKlineChart(items, quote, visibleTrades = [], volumeProfile = null) 
   const maValues = items.flatMap((item) => [item.ma5, item.ma10, item.ma20]).filter(Number.isFinite);
   const tradePrices = visibleTrades.map((trade) => trade.price).filter(Number.isFinite);
   const profilePrices = volumeProfile ? [volumeProfile.upper, volumeProfile.lower] : [];
-  const high = Math.max(...items.map((item) => item.high), ...maValues, ...tradePrices, ...profilePrices);
-  const low = Math.min(...items.map((item) => item.low), ...maValues, ...tradePrices, ...profilePrices);
+  const quotePrice = Number(quote?.price);
+  const quotePrices = Number.isFinite(quotePrice) && quotePrice > 0 ? [quotePrice] : [];
+  const high = Math.max(...items.map((item) => item.high), ...maValues, ...tradePrices, ...profilePrices, ...quotePrices);
+  const low = Math.min(...items.map((item) => item.low), ...maValues, ...tradePrices, ...profilePrices, ...quotePrices);
   const padding = Math.max((high - low) * 0.08, high * 0.005);
   const maxPrice = high + padding;
   const minPrice = Math.max(0, low - padding);
@@ -1414,12 +1416,12 @@ function drawKlineChart(items, quote, visibleTrades = [], volumeProfile = null) 
   });
 
   drawMaLine(ctx, items, "ma5", xOf, yOf, "#d97706");
-  drawMaLine(ctx, items, "ma10", xOf, yOf, "#7c3aed");
-  drawMaLine(ctx, items, "ma20", xOf, yOf, "#1c64f2");
+  drawMaLine(ctx, items, "ma10", xOf, yOf, "#c026d3");
+  drawMaLine(ctx, items, "ma20", xOf, yOf, "#1d4ed8");
   drawTradeMarkers(ctx, visibleTrades, xOf, yOf, priceBottom);
 
-  if (quote?.price) {
-    const y = yOf(quote.price);
+  if (quotePrices.length) {
+    const y = yOf(quotePrice);
     ctx.setLineDash([4, 4]);
     ctx.strokeStyle = "#c52727";
     ctx.beginPath();
@@ -1428,7 +1430,7 @@ function drawKlineChart(items, quote, visibleTrades = [], volumeProfile = null) 
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.fillStyle = "#c52727";
-    ctx.fillText(formatMoney(quote.price), width - margin.right + 6, y + 4);
+    ctx.fillText(formatMoney(quotePrice), width - margin.right + 6, y + 4);
   }
 }
 
